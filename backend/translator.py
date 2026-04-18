@@ -299,11 +299,6 @@ async def translate_paper(
     extraction_api_key = api_key if (user_provider == "google" and api_key) else settings.gemini_api_key
     if extraction_api_key:
         try:
-            genai.configure(api_key=extraction_api_key)
-            # DIAGNOSTIC: Fetch valid models and show on screen to debug the 404
-            available_models = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods and 'flash' in m.name]
-            yield {"type": "status", "data": f"🔍 Valid Google Models on this key: {', '.join(available_models[:10])}..."}
-        
             yield {"type": "status", "data": "✨ Attempting Gemini enhancement for better structure..."}
             
             async def _gemini_enhance():
@@ -329,8 +324,8 @@ async def translate_paper(
                 )
                 return response
 
-            # 30-second hard timeout — if Gemini hangs, we move on
-            response = await asyncio.wait_for(_gemini_enhance(), timeout=30.0)
+            # 90-second hard timeout — PDF extraction needs more time
+            response = await asyncio.wait_for(_gemini_enhance(), timeout=90.0)
             
             if response and response.text and len(response.text) > len(original_english_text) * 0.5:
                 original_english_text = response.text
@@ -339,8 +334,8 @@ async def translate_paper(
                 yield {"type": "status", "data": "✅ Using offline extraction (Gemini result was sparse)."}
                 
         except asyncio.TimeoutError:
-            yield {"type": "status", "data": "⚠️ Gemini timed out after 30s. Using offline text (still accurate)."}
-            logger.warning("Gemini enhancement timed out after 30s")
+            yield {"type": "status", "data": "⚠️ Gemini timed out after 90s. Using offline text (still accurate)."}
+            logger.warning("Gemini enhancement timed out after 90s")
         except Exception as gemini_err:
             err_preview = str(gemini_err)[:60]
             yield {"type": "status", "data": f"⚠️ Gemini unavailable ({err_preview}). Using offline text..."}

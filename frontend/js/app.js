@@ -210,10 +210,11 @@ function setupEventListeners() {
         selectElement.innerHTML = '';
         if (provider === 'google') {
             selectElement.innerHTML = `
-                <option value="">Default (Server Config)</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash ⭐ (High Quota)</option>
+                <option value="">Default (Server Config — 500 RPD)</option>
+                <option value="gemini-flash-lite-latest">Flash Lite Latest ⭐ (500 RPD)</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash (20 RPD)</option>
                 <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                <option value="gemma-3-27b-it">Gemma 3 27B (14,400 RPD, 15K TPM)</option>
+                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
                 <option value="gemini-3.0-flash">Gemini 3 Flash (20 RPD, 250K TPM)</option>
             `;
         } else if (provider === 'openrouter') {
