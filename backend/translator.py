@@ -262,15 +262,21 @@ async def translate_paper(
         yield {"type": "status", "data": f"✅ Found {len(extracted_figures)} high-res figures."}
 
     try:
-        # Check if user provided their own Google key. If so, use it to bypass server quota limits.
+        # STEP 1: Always extract text offline with PyMuPDF first (zero quota, zero cost)
+        yield {"type": "status", "data": "📥 Extracting text structure with offline engine (PyMuPDF)..."}
+        import fitz
+        doc = fitz.open(tmp_path)
+        original_english_text = ""
+        for page in doc:
+            original_english_text += page.get_text("text") + "\n\n"
+
+        # STEP 2: Optionally enhance with Google Gemini for superior structure (only if server key is available)
         extraction_api_key = api_key if (user_provider == "google" and api_key) else settings.gemini_api_key
-        
-        # We wrap the upload and extraction in a try-except specifically to catch Google Quota/Key errors
-        # and trigger the offline PyMuPDF fallback if they fail.
-        try:
-            genai.configure(api_key=extraction_api_key)
-            uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
-            yield {"type": "status", "data": "✅ PDF uploaded successfully. Extracting structural text..."}
+        if extraction_api_key:
+            try:
+                yield {"type": "status", "data": "✨ Enhancing with Gemini Multimodal for superior structure..."}
+                genai.configure(api_key=extraction_api_key)
+                uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
 
             # 3. Pass 0 - Extract Markdown Context (Strict Integrity Mode)
             # Switch to gemini-1.5-flash-8b (Lite) - attempting exact string to avoid 404
@@ -313,34 +319,20 @@ async def translate_paper(
                     await asyncio.sleep(wait_time)
                     
             if not extract_response:
-                raise last_exception or Exception("Failed to extract text from PDF after 5 attempts.")
+                raise last_exception or Exception("Gemini enhancement unavailable.")
                 
-            original_english_text = extract_response.text
+            # Gemini gave us richer Markdown - upgrade the text
+            if extract_response.text and len(extract_response.text) > len(original_english_text) * 0.5:
+                original_english_text = extract_response.text
+                yield {"type": "status", "data": "✅ Gemini enhancement complete. Full Markdown structure preserved."}
+            else:
+                yield {"type": "status", "data": "✅ Using offline extraction (Gemini returned sparse result)."}
 
-        except Exception as google_err:
-            # INTERCEPT ALL GOOGLE ERRORS HERE FOR THE FALLBACK
-            err_msg = str(google_err)
-            
-            # Diagnostic: Print all available models if we hit a 404
-            if "404" in err_msg or "not found" in err_msg.lower():
-                try:
-                    available_models = [m.name for m in genai.list_models()]
-                    logger.error(f"DIAGNOSTIC - Available Models: {available_models}")
-                except:
-                    pass
-
-            yield {"type": "warning", "data": f"⚠️ Google PDF API Failed ({err_msg[:30]}...). Stripping text offline instead (PyMuPDF)..."}
-            try:
-                import fitz
-                doc = fitz.open(tmp_path)
-                original_english_text = ""
-                for page in doc:
-                    original_english_text += page.get_text("text") + "\n\n"
-                
-                if not original_english_text.strip():
-                    raise Exception("Offline fallback could not read any text from the PDF.")
-            except Exception as fallback_err:
-                raise Exception(f"Both Google Extraction and Offline Fallback failed: {str(fallback_err)}")
+        except Exception as gemini_err:
+            # Gemini enhancement failed - but offline extraction already succeeded, so continue!
+            err_preview = str(gemini_err)[:50]
+            yield {"type": "status", "data": f"⚠️ Gemini enhancement unavailable ({err_preview}). Using offline text..."}
+            logger.warning(f"Gemini enhancement failed (non-fatal): {gemini_err}")
 
         if not original_english_text:
             yield {"type": "error", "data": "Failed to extract text from PDF."}
