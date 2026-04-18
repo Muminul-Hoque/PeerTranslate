@@ -212,7 +212,6 @@ function setupEventListeners() {
             selectElement.innerHTML = `
                 <option value="">Default (Server Config — 500 RPD)</option>
                 <option value="gemini-flash-lite-latest">Flash Lite Latest ⭐ (500 RPD)</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (20 RPD)</option>
                 <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
                 <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
                 <option value="gemini-3.0-flash">Gemini 3 Flash (20 RPD, 250K TPM)</option>
