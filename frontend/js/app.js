@@ -430,19 +430,21 @@ async function startTranslation() {
 }
 
 // ── SSE Event Handlers ──
-function handleSSEEvent(type, data) {
+function handleSSEEvent(type, rawData) {
+    let data;
+    try {
+        data = JSON.parse(rawData);
+    } catch (e) {
+        data = rawData; // Fallback if somehow not JSON
+    }
+
     switch (type) {
         case 'status':
             addStatusEntry(data);
             break;
 
         case 'cache_info':
-            try {
-                const info = JSON.parse(data);
-                if (info.hash_key) currentHashKey = info.hash_key;
-            } catch {
-                console.warn('Failed to parse cache info');
-            }
+            if (data && data.hash_key) currentHashKey = data.hash_key;
             break;
 
         case 'translation':
@@ -450,30 +452,15 @@ function handleSSEEvent(type, data) {
             break;
 
         case 'verification':
-            try {
-                const report = JSON.parse(data);
-                renderVerification(report);
-            } catch {
-                console.warn('Failed to parse verification data');
-            }
+            if (typeof data === 'object') renderVerification(data);
             break;
 
         case 'verification_section':
-            try {
-                const sectionData = JSON.parse(data);
-                renderSectionVerification(sectionData);
-            } catch {
-                console.warn('Failed to parse section verification data');
-            }
+            if (typeof data === 'object') renderSectionVerification(data);
             break;
 
         case 'retranslation':
-            try {
-                const section = JSON.parse(data);
-                addStatusEntry(`🔧 Re-translated: ${section.section}`);
-            } catch {
-                console.warn('Failed to parse retranslation data');
-            }
+            if (data && data.section) addStatusEntry(`🔧 Re-translated: ${data.section}`);
             break;
 
         case 'error':

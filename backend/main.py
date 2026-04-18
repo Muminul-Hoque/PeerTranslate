@@ -271,8 +271,6 @@ async def translate(
                 yield {
                     "event": event["type"],
                     "data": json.dumps(event["data"])
-                    if isinstance(event["data"], dict)
-                    else event["data"],
                 }
         except Exception as e:
             logger.error(f"Translation pipeline error: {e}", exc_info=True)
