@@ -62,6 +62,19 @@ def _get_db():
         )
     """)
 
+    # Create Community Contributions Table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS community_contributions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            language TEXT NOT NULL,
+            domain TEXT NOT NULL,
+            terms_json TEXT NOT NULL,
+            contributor_name TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # Indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_language ON translations(language)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_domain ON translations(paper_domain)")

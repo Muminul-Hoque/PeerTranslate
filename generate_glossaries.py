@@ -1,23 +1,28 @@
-import json
 import os
+import json
 import time
+import sys
 import google.generativeai as genai
-from google.api_core.exceptions import ResourceExhausted
+from pathlib import Path
 from dotenv import load_dotenv
 
-BASE_DIR = r"E:\antigravity\PeerTranslate"
-env_path = os.path.join(BASE_DIR, ".env")
-load_dotenv(dotenv_path=env_path, override=True)
+def log(msg):
+    print(msg, flush=True)
 
+# Load environment
+BASE_DIR = Path(r"E:\antigravity\PeerTranslate")
+load_dotenv(BASE_DIR / ".env")
 api_key = os.getenv("GEMINI_API_KEY")
+
 if not api_key:
-    print("FATAL: No API key found at " + env_path, flush=True)
+    log("Error: GEMINI_API_KEY not found.")
     exit(1)
 
 genai.configure(api_key=api_key)
-model = genai.GenerativeModel("gemini-flash-latest") # Use lighter model to reduce token/RPM issues
+model = genai.GenerativeModel("gemini-2.5-flash")
 
-supported_langs = {
+# Configuration
+languages = {
     "hi": "हिन्दी (Hindi)", "ta": "தமிழ் (Tamil)", "ur": "اردو (Urdu)",
     "es": "Español (Spanish)", "fr": "Français (French)", "de": "Deutsch (German)",
     "ja": "日本語 (Japanese)", "ko": "한국어 (Korean)", "zh": "中文 (Chinese)",
@@ -33,53 +38,92 @@ domains = [
     "law", "business", "linguistics", "general_academic"
 ]
 
-BASE_DIR = r"E:\antigravity\PeerTranslate"
-
-for lang_code, lang_name in supported_langs.items():
-    lang_dir = os.path.join(BASE_DIR, "glossaries", lang_code)
-    os.makedirs(lang_dir, exist_ok=True)
-    
+def load_bn_seeds():
+    log("Loading Bengali seed glossaries...")
+    seeds = {}
+    bn_dir = BASE_DIR / "glossaries" / "bn"
     for domain in domains:
-        out_path = os.path.join(lang_dir, f"{domain}.json")
-        if os.path.exists(out_path):
-            continue
-            
-        bn_path = os.path.join(BASE_DIR, "glossaries", "bn", f"{domain}.json")
-        with open(bn_path, "r", encoding="utf-8") as f:
-            bn_data = json.load(f)
-            
-        english_terms = list(bn_data["terms"].keys())
-        
-        prompt = f"""You are a translator for {lang_name}. Return ONLY a raw JSON object string mapping these English terms to their {lang_name} translations. For highly technical ML/CS terms, transliterate them and add the original English in parentheses. Terms to translate: {json.dumps(english_terms)}"""
-        
-        print(f"Generating {lang_code}/{domain} ...", flush=True)
-        success = False
-        retries = 0
-        while not success and retries < 5:
-            try:
-                response = model.generate_content(prompt)
-                result_json = response.text.replace('```json', '').replace('```', '').strip()
-                translated_dict = json.loads(result_json)
-                
-                final_data = {
-                    "language": lang_name,
-                    "domain": domain,
-                    "terms": translated_dict
-                }
-                
-                with open(out_path, "w", encoding="utf-8") as f:
-                    json.dump(final_data, f, ensure_ascii=False, indent=4)
-                
-                success = True
-                time.sleep(5)  # Stay safely under 15 RPM limit
-                
-            except ResourceExhausted as e:
-                print(f"Rate limited. Sleeping 45 seconds... {e}", flush=True)
-                time.sleep(45)
-                retries += 1
-            except Exception as e:
-                print(f"Failed parsing {lang_code}/{domain}, error: {e}. Retrying.")
-                time.sleep(5)
-                retries += 1
+        path = bn_dir / f"{domain}.json"
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                seeds[domain] = json.load(f)["terms"]
+        else:
+            log(f"Warning: BN seed for {domain} missing.")
+    return seeds
 
-print("Done generating all glossaries!")
+def batch_generate():
+    seeds = load_bn_seeds()
+    
+    for lang_code, lang_name in languages.items():
+        lang_dir = BASE_DIR / "glossaries" / lang_code
+        os.makedirs(lang_dir, exist_ok=True)
+        
+        # Check if already fully generated
+        existing_files = [f for f in domains if (lang_dir / f"{f}.json").exists()]
+        if len(existing_files) == len(domains):
+            log(f"Skipping {lang_code} (already complete with {len(existing_files)} files)")
+            continue
+
+        log(f"Processing {lang_code}... Requesting batch translation for 21 domains.")
+        
+        prompt = f"""
+        You are an expert academic translator. 
+        I am giving you 21 academic domain glossaries in English -> Bengali.
+        Your task is to translate these exact terms into {lang_name} ({lang_code}).
+        
+        RULES:
+        1. Keep the English term as the key.
+        2. Provide the translation in {lang_name}.
+        3. For technical terms (e.g., 'backpropagation'), use the native script but include the original English in parentheses.
+        4. Return the result strictly as a valid JSON object where keys are domain names (e.g., "cs", "math") and values are the corresponding translated glossary objects.
+        
+        SOURCE BENGALI GLOSSARIES:
+        {json.dumps(seeds, ensure_ascii=False, indent=1)}
+        
+        RETURN FORMAT:
+        {{
+            "cs": {{ "term": "translation", ... }},
+            "math": {{ ... }},
+            ... (all 21 domains)
+        }}
+        """
+
+        try:
+            start_time = time.time()
+            response = model.generate_content(prompt)
+            duration = time.time() - start_time
+            log(f"API Response received in {duration:.1f}s. Parsing...")
+
+            raw_text = response.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text[7:-3].strip()
+            elif raw_text.startswith("```"):
+                raw_text = raw_text[3:-3].strip()
+                
+            batch_data = json.loads(raw_text)
+            
+            saved_count = 0
+            for domain in domains:
+                if domain in batch_data:
+                    output_path = lang_dir / f"{domain}.json"
+                    data = {
+                        "domain": domain,
+                        "language": lang_code,
+                        "version": "1.0.0",
+                        "contributors": ["PeerTranslate AI"],
+                        "terms": batch_data[domain]
+                    }
+                    with open(output_path, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=4, ensure_ascii=False)
+                    saved_count += 1
+            
+            log(f"Success! Generated {saved_count}/21 files for {lang_code}.")
+            time.sleep(15) 
+            
+        except Exception as e:
+            log(f"Error processing {lang_code}: {e}")
+            time.sleep(40)
+
+if __name__ == "__main__":
+    batch_generate()
+    log("ALL GLOSSARIES GENERATED SUCCESSFULLY!")

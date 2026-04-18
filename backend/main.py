@@ -69,6 +69,37 @@ if frontend_dir.exists():
 # Routes
 # ──────────────────────────────────────────────
 
+class TermContribution(BaseModel):
+    language: str
+    domain: str
+    contributor_name: str
+    terms: dict
+
+@app.post("/api/contribute")
+async def submit_contribution(data: TermContribution):
+    """Save an inline glossary contribution to the pending database."""
+    from backend.cache import _get_db
+    try:
+        conn = _get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            """
+            INSERT INTO community_contributions (language, domain, terms_json, contributor_name)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                data.language,
+                data.domain,
+                json.dumps(data.terms, ensure_ascii=False),
+                data.contributor_name
+            )
+        )
+        conn.commit()
+        return {"status": "success", "message": "Contribution saved to queue."}
+    except Exception as e:
+        logger.error(f"Failed to save contribution: {e}")
+        raise HTTPException(status_code=500, detail="Database insertion failed.")
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():

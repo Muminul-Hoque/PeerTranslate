@@ -58,10 +58,10 @@ async function loadLanguages() {
             defaultLang = navigator.language.split('-')[0];
         }
 
-        // If the browser language isn't supported, fallback to Bengali
+        // If the browser language isn't supported, fallback to the first language in the API response (usually Arabic or Bengali alphabetically)
         const supportedCodes = data.languages.map(l => l.code);
         if (!supportedCodes.includes(defaultLang)) {
-            defaultLang = 'bn';
+            defaultLang = data.languages.length > 0 ? data.languages[0].code : 'es';
         }
 
         data.languages.forEach((lang) => {

@@ -111,6 +111,10 @@
         <form id="contribute-form">
             <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
                 <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted);">Your Name (For Leaderboard)</label>
+                    <input type="text" id="name-input" class="term-input" placeholder="e.g., Dr. Jane Doe" required>
+                </div>
+                <div style="flex: 1;">
                     <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted);">Target Language</label>
                     <input type="text" id="lang-input" class="term-input" placeholder="e.g., Bengali (বাংলা)" required>
                 </div>
@@ -164,8 +168,13 @@
             
             <button type="button" class="btn-add" id="add-term-btn">+ Add Another Term</button>
             
-            <button type="submit" class="btn-submit">Submit to Review Queue</button>
-            <p class="github-notice">This will safely open a pre-filled GitHub issue for our maintainers to review. No account required to draft, though GitHub account needed to post.</p>
+            <button type="submit" class="btn-submit" id="submit-btn" style="transition: all 0.3s; position: relative; display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+                <span>Submit to Review Queue</span>
+            </button>
+            <p class="github-notice" id="success-message" style="display: none; color: var(--accent-emerald); font-weight: bold; background: rgba(52,211,153,0.1); padding: 1rem; border-radius: var(--radius-sm); margin-top: 1rem;">
+                🎉 Thank you! Your terms have been safely sent to our database.
+            </p>
+            <p class="github-notice" id="default-notice">This submits directly to our internal database queue. Maintainers will review and merge them into the global API safely.</p>
         </form>
     </div>
 
@@ -210,10 +219,16 @@
             }
         }
 
-        form.addEventListener('submit', (e) => {
+        form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            const submitBtn = document.getElementById('submit-btn');
+            const submitSpan = submitBtn.querySelector('span');
+            submitBtn.disabled = true;
+            submitSpan.innerText = "Submitting...";
+
             const lang = document.getElementById('lang-input').value;
+            const contribName = document.getElementById('name-input').value;
             const domainSelect = document.getElementById('domain-input').value;
             const domain = domainSelect === 'custom' 
                 ? document.getElementById('custom-domain-input').value 
@@ -222,19 +237,47 @@
             const engInputs = document.querySelectorAll('.english-term');
             const tgtInputs = document.querySelectorAll('.target-term');
             
-            let markdownList = '';
+            let termDict = {};
             for(let i=0; i < engInputs.length; i++) {
-                if(engInputs[i].value.trim() && tgtInputs[i].value.trim()) {
-                    markdownList += `- **${engInputs[i].value.trim()}**: ${tgtInputs[i].value.trim()}\n`;
+                const en_term = engInputs[i].value.trim();
+                const tl_term = tgtInputs[i].value.trim();
+                if(en_term && tl_term) {
+                    termDict[en_term] = tl_term;
                 }
             }
 
-            const title = `feat(glossary): New terms for ${lang} - ${domain}`;
-            const body = `### Expert Glossary Contribution\n\n**Language**: ${lang}\n**Domain**: ${domain}\n\n### Proposed Terms:\n\n${markdownList}\n\n---\n*Submitted via PeerTranslate Web Contribute*`;
-            
-            const githubUrl = `https://github.com/muminul-hoque/PeerTranslate/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=glossary%20contribution`;
-            
-            window.open(githubUrl, '_blank');
+            try {
+                const response = await fetch('/api/contribute', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        language: lang,
+                        domain: domain,
+                        contributor_name: contribName,
+                        terms: termDict
+                    })
+                });
+
+                if (response.ok) {
+                    document.getElementById('default-notice').style.display = 'none';
+                    document.getElementById('success-message').style.display = 'block';
+                    submitBtn.style.background = 'var(--accent-emerald)';
+                    submitSpan.innerText = "Submitted Successfully!";
+                    
+                    // Reset form after a delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 4000);
+                } else {
+                    submitBtn.style.background = 'var(--accent-rose)';
+                    submitSpan.innerText = "Error: Database failed!";
+                    submitBtn.disabled = false;
+                }
+            } catch (err) {
+                submitBtn.style.background = 'var(--accent-rose)';
+                submitSpan.innerText = "Warning: Network error";
+                submitBtn.disabled = false;
+            }
         });
     </script>
 </body>
