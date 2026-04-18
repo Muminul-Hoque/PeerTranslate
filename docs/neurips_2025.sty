@@ -1,0 +1,84 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{neurips_2025}[2025/04/18 NIPS 2025 submission/camera-ready style file]
+
+% set dimensions of columns, gap between columns, and paragraph indent
+\setlength{\textheight}{9in}
+\setlength{\textwidth}{5.5in}
+\setlength{\oddsidemargin}{0.5in}
+\setlength{\evensidemargin}{0.5in}
+\setlength{\topmargin}{0in}
+\setlength{\headheight}{0in}
+\setlength{\headsep}{0in}
+\setlength{\columnsep}{0.375in}
+\setlength{\marginparwidth}{0.5in}
+\setlength{\marginparsep}{0.125in}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1ex plus 0.5ex minus 0.2ex}
+
+% Options
+\DeclareOption{submission}{\neurips@submissiontrue\neurips@preprintfalse}
+\DeclareOption{preprint}{\neurips@submissionfalse\neurips@preprinttrue}
+\DeclareOption{final}{\neurips@submissionfalse\neurips@preprintfalse}
+\DeclareOption{nonatbib}{\neurips@natbibfalse}
+
+\newif\ifneurips@submission
+\newif\ifneurips@preprint
+\newif\ifneurips@natbib
+\neurips@submissiontrue
+\neurips@preprintfalse
+\neurips@natbibtrue
+
+\ProcessOptions\relax
+
+% natbib config
+\ifneurips@natbib
+  \RequirePackage{natbib}
+  \setcitestyle{authoryear,round,citesep={;},aysep={,},yysep={;}}
+\fi
+
+% fonts and headings
+\renewcommand{\normalsize}{\fontsize{10}{12}\selectfont}
+\renewcommand{\small}{\fontsize{9}{11}\selectfont}
+\renewcommand{\footnotesize}{\fontsize{8}{10}\selectfont}
+\renewcommand{\scriptsize}{\fontsize{7}{9}\selectfont}
+\renewcommand{\tiny}{\fontsize{6}{7}\selectfont}
+\renewcommand{\large}{\fontsize{12}{14}\selectfont}
+\renewcommand{\Large}{\fontsize{14}{17}\selectfont}
+\renewcommand{\LARGE}{\fontsize{17}{20}\selectfont}
+\renewcommand{\huge}{\fontsize{20}{24}\selectfont}
+\renewcommand{\Huge}{\fontsize{25}{30}\selectfont}
+
+\RequirePackage{titlesec}
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\itshape}{\thesubsubsection}{1em}{}
+
+% abstract
+\renewenvironment{abstract}
+  {\centerline{\large\bfseries Abstract}
+   \vspace{0.5ex}
+   \begin{quote}}
+  {\end{quote}}
+
+% title and authors
+\def\toptitlebar{\hrule height4pt\vskip .25in\vskip-\parskip}
+\def\bottomtitlebar{\vskip .29in\vskip-\parskip\hrule height1pt\vskip .09in}
+
+\renewcommand{\maketitle}{%
+  \vbox{%
+    \hsize\textwidth
+    \linewidth\hsize
+    \vskip 0.1in
+    \toptitlebar
+    \centering
+    {\LARGE\bf \@title\par}
+    \bottomtitlebar
+    \vskip 0.3in
+    \begin{tabular}[t]{c}\@author\end{tabular}
+    \vskip 0.3in
+  }
+}
+
+% basic footnotes
+\renewcommand{\thefootnote}{\arabic{footnote}}
+\endinput

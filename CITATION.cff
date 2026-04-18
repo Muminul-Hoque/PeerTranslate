@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If PaperTranslate helps your research, please cite it."
+title: "PaperTranslate: Verified Research Paper Translation for Every Language"
+type: software
+authors:
+  - family-names: Hoque
+    given-names: Muhammed Muminul
+    orcid: ""
+repository-code: "https://github.com/muminul-hoque/PaperTranslate"
+license: MIT
+version: 0.1.0
+date-released: "2026-04-17"
+keywords:
+  - research-paper-translation
+  - academic-translation
+  - bengali
+  - multilingual
+  - gemini-api
+  - back-translation-verification
+  - open-source

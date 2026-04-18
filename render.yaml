@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: peertranslate
+    runtime: docker
+    plan: free
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: PORT
+        value: 8000
+    healthCheckPath: /api/health

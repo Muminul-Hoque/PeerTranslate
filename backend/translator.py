@@ -1,0 +1,519 @@
+import logging
+import os
+import tempfile
+import asyncio
+from typing import AsyncGenerator, Dict, Any, Optional
+
+import google.generativeai as genai
+from openai import AsyncOpenAI
+
+from backend.config import SUPPORTED_LANGUAGES, Settings
+from backend.glossary import load_all_glossaries, build_glossary_prompt
+from backend.verifier import (
+    VerificationReport,
+    SectionScore,
+    build_verification_report,
+    split_into_sections,
+    compute_similarity,
+    check_terminology,
+)
+from backend.cache import get_cached_translation, save_translation, get_hash
+from backend.figure_extractor import extract_images_from_pdf, reinsert_figures
+
+logger = logging.getLogger(__name__)
+
+def _get_language_name(code: str) -> str:
+    entry = SUPPORTED_LANGUAGES.get(code, code)
+    if "(" in entry and ")" in entry:
+        return entry.split("(")[1].rstrip(")")
+    return entry
+
+
+def _build_translation_prompt(language_name: str, glossary_prompt: str) -> str:
+    return f"""You are PeerTranslate, a world-class academic research paper translator.
+
+## YOUR TASK
+Translate the following research paper from English into **{language_name}**.
+
+## CRITICAL RULES
+1. **Preserve the ENTIRE structure** of the paper: all headings, subheadings, bullet points, numbered lists, tables, equations, and references.
+2. **Output in Markdown format** with proper heading hierarchy (# for title, ## for sections, ### for subsections).
+3. **DO NOT translate**: author names, institution names, URLs, DOIs, email addresses, reference citations, mathematical equations/formulas, code snippets, and figure/table numbers.
+4. **DO translate**: title, abstract, all body text, section headings, figure captions, table captions, and conclusion.
+5. **Maintain academic register**: Use formal, scholarly language appropriate for the target language. Do not simplify or paraphrase.
+6. **Preserve paragraph structure**: Each paragraph in the original should map to exactly one paragraph in the translation.
+7. **Technical accuracy**: Scientific claims, numerical data, and methodological descriptions must be translated with 100% fidelity.
+8. **MISSION: HIGH-FIDELITY**: DO NOT add any information that is not in the English source. DO NOT summarize. DO NOT invent findings or methods.
+9. **ZERO PARAPHRASING**: Do not write filler text or introductory remarks before or after translating the actual text.
+10. **STRICT MAPPING**: Only use headings that exist in the original text. Do not invent headings like "Introduction" or "Methods" if they are not in the source block.
+
+{glossary_prompt}
+
+CRITICAL: Return ONLY the raw Markdown translation. No introductory tags or conversational text.
+"""
+
+def _build_back_translation_prompt(language_name: str) -> str:
+    return f"""You are a master academic editor.
+
+## YOUR TASK
+Translate the following {language_name} research paper back into **English**.
+
+## CRITICAL RULES
+1. Preserve the exact structure and all headings.
+2. Output in pure Markdown format.
+3. Return ONLY the raw English Markdown text. No chat or explanations.
+"""
+
+def _build_judge_prompt(orig_text: str, back_text: str) -> str:
+    return f"""You are an expert scientific evaluator. Compare a research paper section (ORIGINAL) and its back-translation (VERIFICATION).
+
+## ORIGINAL ENGLISH:
+```markdown
+{orig_text}
+```
+
+## BACK-TRANSLATED ENGLISH:
+```markdown
+{back_text}
+```
+
+## YOUR TASK:
+Rate the semantic accuracy: Does the VERIFICATION text represent the EXACT same scientific meaning as the ORIGINAL?
+- Ignore minor word choice differences or formatting styles.
+- Focus strictly on technical accuracy and data fidelity.
+- **PENALIZE FABRICATION**: If the back-translation contains information or sections that DO NOT exist in the original (hallucinations), give a very low score (<30).
+- If it's a perfect semantic match, give 100.
+- If it's a completely different topic, give 0.
+
+CRITICAL: Output ONLY a single integer between 0 and 100 representing the accuracy percentage. Do not include any text or explanations.
+"""
+
+def _build_refinement_prompt(language_name: str, glossary_prompt: str, failed_translation: str) -> str:
+    return f"""You are a world-class academic proofreader and translator.
+
+## YOUR TASK
+You previously translated a section of a research paper into {language_name}, but the translation was flagged as **inaccurate** during verification. 
+
+**Your goal is to compare the ENGLISH ORIGINAL with your PREVIOUS FAILED ATTEMPT and produce a 100% faithful, improved version.**
+
+## PREVIOUS FAILED ATTEMPT (DO NOT REPEAT THESE ERRORS):
+```markdown
+{failed_translation}
+```
+
+## GUIDELINES FOR THE FIX:
+1. Identify missing information, inaccuracies, or weird phrasing in the attempt above.
+2. Ensure scientific terms match the glossary exactly.
+3. Maintain the precise academic tone of the English original.
+4. **MISSION: HIGH-FIDELITY**: DO NOT cross-reference outside knowledge. ONLY use the original English text provided in this prompt.
+5. **ZERO ADDITIONS**: Do not add extra explanations or sections.
+4. ONLY output the corrected translation.
+
+{glossary_prompt}
+
+CRITICAL: Return ONLY the raw Markdown translation. No introductory tags like "Here is the translation".
+"""
+
+async def _get_llm_response(
+    system_prompt: str,
+    user_content: str,
+    provider: str,
+    api_key: Optional[str],
+    model_name: Optional[str],
+    settings: Settings,
+    temperature: float = 0.1
+) -> str:
+    """Hybrid LLM generator for OpenRouter, OpenAI, and Google Native Strings."""
+    import asyncio
+    max_retries = 5
+    
+    if provider == "google" or not provider:
+        key_to_use = api_key if api_key else settings.gemini_api_key
+        model_to_use = model_name if model_name else settings.gemini_model
+        genai.configure(api_key=key_to_use)
+        model = genai.GenerativeModel(model_to_use)
+        full_prompt = f"{system_prompt}\n\n{user_content}"
+        
+        last_exception = None
+        for attempt in range(max_retries):
+            try:
+                response = await model.generate_content_async(
+                    [full_prompt],
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=temperature,
+                        max_output_tokens=65536,
+                    ),
+                )
+                return response.text
+            except Exception as e:
+                last_exception = e
+                wait_time = (attempt + 1) * 10  # Wait 10s, 20s...
+                logger.warning(f"Google API Error (429/503). Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                await asyncio.sleep(wait_time)
+                
+        raise last_exception or Exception(f"Failed after {max_retries} attempts.")
+        
+    else:
+        # OpenAI or OpenRouter
+        base_url = "https://openrouter.ai/api/v1" if provider == "openrouter" else None
+        # Default models if empty
+        if not model_name:
+            model_name = "meta-llama/llama-3.1-8b-instruct:free" if provider == "openrouter" else "gpt-4o-mini"
+            
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        
+        max_retries = 3
+        last_exception = None
+        
+        import asyncio
+        import openai
+
+        for attempt in range(max_retries):
+            try:
+                response = await client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content}
+                    ],
+                    temperature=temperature
+                )
+                return response.choices[0].message.content
+            except openai.RateLimitError as e:
+                last_exception = e
+                wait_time = (attempt + 1) * 5 # Wait 5s, 10s...
+                logger.warning(f"Rate limited by {provider} (429). Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                await asyncio.sleep(wait_time)
+            except Exception as e:
+                # Immediate fail for non-429 errors
+                raise e
+        
+        raise last_exception or Exception(f"Failed after {max_retries} attempts due to rate limits.")
+
+
+async def translate_paper(
+    pdf_content: bytes,
+    target_language: str,
+    settings: Settings,
+    api_key: Optional[str] = None,
+    user_model: Optional[str] = None,
+    user_provider: str = "google",
+    judge_provider: str = "google",
+    judge_model: Optional[str] = None,
+    judge_api_key: Optional[str] = None,
+) -> AsyncGenerator[Dict[str, Any], None]:
+    
+    language_name = _get_language_name(target_language)
+
+    # 1. Load Glossary
+    yield {"type": "status", "data": "📚 Loading academic glossary..."}
+    glossary_terms = load_all_glossaries(target_language)
+    glossary_prompt = build_glossary_prompt(glossary_terms)
+    yield {"type": "status", "data": f"✅ Loaded {len(glossary_terms)} domain-specific terms"}
+
+    # 1.5 Check Cache First
+    pdf_hash = get_hash(pdf_content, target_language)
+    cached_data = get_cached_translation(pdf_content, target_language, settings.similarity_threshold)
+    
+    # Always send the hash key so the frontend can report issues
+    yield {"type": "cache_info", "data": {"hash_key": pdf_hash}}
+    
+    if cached_data:
+        yield {"type": "status", "data": "🌟 Found verified translation in Community Cache!"}
+        
+        # We simulate the verification event from the score
+        score = cached_data["verification_score"]
+        if score >= 0.98:
+            label = "excellent"
+        elif score >= 0.96:
+            label = "good"
+        elif score >= 0.70:
+            label = "needs_review"
+        else:
+            label = "low_confidence"
+            
+        yield {
+            "type": "verification",
+            "data": {
+                "overall_score": f"{score * 100:.1f}%",
+                "overall_label": label,
+                "flagged_sections": 0,
+                "total_sections": 0,
+                "section_scores": []
+            }
+        }
+        
+        yield {"type": "translation", "data": cached_data["translated_markdown"]}
+        yield {"type": "complete", "data": "Translation retrieved from community cache."}
+        return
+
+    # 2. Upload PDF for Extraction (Google Only)
+    yield {"type": "status", "data": "📄 Uploading PDF to Gemini for Native Extraction..."}
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
+        tmp_file.write(pdf_content)
+        tmp_path = tmp_file.name
+        
+    yield {"type": "status", "data": "🖼️ Extracting figures and diagrams..."}
+    extracted_figures = extract_images_from_pdf(pdf_content)
+    if extracted_figures:
+        yield {"type": "status", "data": f"✅ Found {len(extracted_figures)} high-res figures."}
+
+    try:
+        # Always use Google for extraction, using Server Key so user quota isn't burned.
+        genai.configure(api_key=settings.gemini_api_key)
+        uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
+        yield {"type": "status", "data": "✅ PDF uploaded successfully. Extracting structural text..."}
+
+        # 3. Pass 0 - Extract Markdown Context (Strict Integrity Mode)
+        extraction_model = genai.GenerativeModel("gemini-2.0-flash-lite-001") 
+        
+        extract_response = None
+        last_exception = None
+        for attempt in range(5):
+            try:
+                extract_response = await extraction_model.generate_content_async(
+                    [
+                        "MISSION: HIGH-FIDELITY ACADEMIC EXTRACTION\n"
+                        "YOUR TASK: Extract the raw text from this PDF with 100% literal accuracy into Markdown format.\n\n"
+                        "CRITICAL CONSTRAINTS (VIOLATION WILL RESULT IN SYSTEM FAILURE):\n"
+                        "1. DO NOT summarize. DO NOT simplify. DO NOT invent citations. YOU MUST extract the literal text as written.\n"
+                        "2. DO NOT add sections that do not exist (e.g. if the paper is a study, do not invent a 'Methods' or 'Results' block).\n"
+                        "3. PRESERVE ALL TECHNICAL JARGON EXACTLY AS IS.\n"
+                        "4. DEDUPLICATE: If the Abstract appears twice, extract it ONLY ONCE.\n"
+                        "5. PRESERVE STRUCTURE: Use precise Markdown hierarchy (#, ##, ###).\n\n"
+                        "Return ONLY the literal extracted Markdown text.",
+                        uploaded_file,
+                    ],
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0.0,
+                        max_output_tokens=65536,
+                    ),
+                )
+                break
+            except Exception as e:
+                last_exception = e
+                err_msg = str(e).lower()
+                if "quota" in err_msg and "exceeded" in err_msg:
+                    # Daily or strict API quota limit hit immediately, not just a burst.
+                    break
+                wait_time = (attempt + 1) * 10
+                logger.warning(f"Google API Error passing Pass 0. Retrying in {wait_time}s...")
+                await asyncio.sleep(wait_time)
+                
+        if not extract_response:
+            err_msg = str(last_exception)
+            if "quota" in err_msg.lower():
+                yield {"type": "error", "data": "Google Free Tier Quota Exhausted! Please generate a new API key from AI Studio or upgrade your account tier."}
+                return
+            else:
+                raise last_exception or Exception("Failed to extract text from PDF after 5 attempts.")
+
+        original_english_text = extract_response.text
+
+        if not original_english_text:
+            yield {"type": "error", "data": "Failed to extract text from PDF."}
+            return
+            
+        yield {"type": "status", "data": "✅ Extracted original English Markdown."}
+
+        # 4. Start Real-Time 4-Pass Pipeline (Iterative Section-by-Section)
+        yield {"type": "status", "data": f"🚀 Starting Real-Time 4-Pass Pipeline via {user_provider.upper()}..."}
+        
+        translation_prompt = _build_translation_prompt(language_name, glossary_prompt)
+        back_translation_prompt = _build_back_translation_prompt(language_name)
+        
+        sections = split_into_sections(original_english_text)
+        full_translated_markdown = ""
+        section_scores = []
+        
+        for i, section in enumerate(sections):
+            section_title = section["title"]
+            section_index_txt = f"{i+1}/{len(sections)}"
+            
+            # --- Pass 1: Translate ---
+            yield {"type": "status", "data": f"⏳ [{section_index_txt}] Translating: {section_title}..."}
+            section_content = f"## {section_title}\n\n{section['content']}"
+            
+            try:
+                translated_chunk = await _get_llm_response(
+                    translation_prompt, section_content, user_provider, api_key, user_model, settings
+                )
+                
+                if not translated_chunk:
+                    raise Exception("Model returned empty translation.")
+
+                # --- Pass 2 & 3: Verification with Recursive Loop (Pass 4) ---
+                max_attempts = 2
+                best_similarity = 0.0
+                best_chunk = translated_chunk
+                final_score_obj = None
+
+                for attempt in range(1, max_attempts + 1):
+                    # --- Pass 2: Back-Translate ---
+                    yield {"type": "status", "data": f"🔄 [{section_index_txt}] Verifying (Attempt {attempt})..."}
+                    back_chunk = await _get_llm_response(
+                        back_translation_prompt, translated_chunk, user_provider, api_key, user_model, settings
+                    )
+                    
+                    # --- Pass 3: Score Section (AI Judge Mode) ---
+                    yield {"type": "status", "data": f"⚖️ [{section_index_txt}] AI Judge ({judge_provider}) is evaluating meaning... (Attempt {attempt})"}
+                    
+                    judge_prompt = _build_judge_prompt(section_content, back_chunk or "")
+                    similarity = 0.0
+                    
+                    try:
+                        # Level 1: Use user-selected Judge
+                        actual_judge_key = judge_api_key if judge_api_key else (api_key if judge_provider == user_provider else None)
+                        
+                        score_str = await _get_llm_response(
+                            "You are a strict technical evaluator.", 
+                            judge_prompt, 
+                            judge_provider, 
+                            actual_judge_key, 
+                            judge_model, 
+                            settings, 
+                            temperature=0.0
+                        )
+                        import re
+                        match = re.search(r'(\d+)', score_str)
+                        similarity = float(match.group(1)) / 100.0 if match else 0.0
+                    except Exception as e1:
+                        logger.warning(f"Level 1 Judge failed ({judge_provider}): {e1}")
+                        yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Custom Judge failed. Recovering with Server-Side Gemini..."}
+                        
+                        try:
+                            # Level 2: Use Server-Side Google Gemini fallback
+                            score_str = await _get_llm_response(
+                                "You are a strict technical evaluator.", 
+                                judge_prompt, 
+                                "google", 
+                                None, 
+                                None, 
+                                settings, 
+                                temperature=0.0
+                            )
+                            import re
+                            match = re.search(r'(\d+)', score_str)
+                            similarity = float(match.group(1)) / 100.0 if match else 0.0
+                        except Exception as e2:
+                            logger.error(f"Level 2 Judge failed (Google): {e2}")
+                            yield {"type": "status", "data": f"⚠️ [{section_index_txt}] AI Verification unreachable. Using literal math baseline..."}
+                            # Level 3: Final Resort - Literal Matching
+                            similarity = compute_similarity(section_content, back_chunk or "")
+                    
+                    flagged = check_terminology(translated_chunk, glossary_terms)
+                    
+                    score_obj = SectionScore(
+                        section_title=section_title,
+                        original_text=section["content"][:100],
+                        back_translated_text=(back_chunk or "")[:100],
+                        similarity_score=similarity,
+                        flagged_terms=flagged
+                    )
+
+                    # Update best result if this is better or first
+                    if similarity > best_similarity or final_score_obj is None:
+                        best_similarity = similarity
+                        best_chunk = translated_chunk
+                        final_score_obj = score_obj
+
+                    # If confident or last attempt, we're done with this section
+                    if score_obj.is_confident or attempt == max_attempts:
+                        if not score_obj.is_confident:
+                             yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Final accuracy: {round(similarity*100)}%. Proceeding..."}
+                        else:
+                             yield {"type": "status", "data": f"✅ [{section_index_txt}] Verified: {round(similarity*100)}%."}
+                        break
+                    
+                    # --- Pass 4: Ultra-Precision Refinement (Triggered if low confidence) ---
+                    yield {"type": "status", "data": f"🛠️ [{section_index_txt}] Accuracy too low ({round(similarity*100)}%). Error Correction Mode active..."}
+                    
+                    retranslate_sys = _build_refinement_prompt(language_name, glossary_prompt, translated_chunk)
+                    
+                    refined_chunk = await _get_llm_response(
+                        retranslate_sys, section_content, user_provider, api_key, user_model, settings, temperature=0.2
+                    )
+                    
+                    if refined_chunk:
+                        translated_chunk = refined_chunk
+                    else:
+                        break # Cannot refine if model gives empty response
+
+                # Commit the best result
+                full_translated_markdown += best_chunk + "\n\n"
+                section_scores.append(final_score_obj)
+                
+                # Update UI with final text
+                yield {"type": "translation", "data": full_translated_markdown}
+                
+                # Update UI with final accuracy card
+                yield {
+                    "type": "verification_section",
+                    "data": {
+                        "title": section_title,
+                        "score": round(final_score_obj.similarity_score * 100, 1),
+                        "label": final_score_obj.confidence_label,
+                        "flagged_terms": final_score_obj.flagged_terms,
+                        "metrics": {
+                            "current_index": i + 1,
+                            "total_sections": len(sections),
+                            "running_avg": round((sum(s.similarity_score for s in section_scores) / len(section_scores)) * 100, 1)
+                        }
+                    }
+                }
+
+            except Exception as e:
+                logger.error(f"Error in section {section_title}: {e}")
+                error_msg = f"Translation/Verification failed for section: {section_title}"
+                yield {"type": "warning", "data": error_msg}
+                full_translated_markdown += f"\n\n> [!ERROR] {error_msg}\n\n"
+                yield {"type": "translation", "data": full_translated_markdown}
+
+        # Build final report and save to cache
+        final_report = VerificationReport(section_scores=section_scores)
+        
+        # Inject figures before saving and returning
+        full_translated_markdown = reinsert_figures(full_translated_markdown, extracted_figures)
+        yield {"type": "translation", "data": full_translated_markdown}
+        
+        save_translation(
+            pdf_bytes=pdf_content,
+            language=target_language,
+            translated_markdown=full_translated_markdown,
+            verification_score=final_report.overall_score,
+            model_used=user_model or "default",
+            glossary_version="1.0.0" # Could be dynamic if needed
+        )
+
+        yield {"type": "status", "data": "🎉 4-Pass Pipeline complete! Final verification summary below."}
+        
+        try:
+            import json
+            yield {
+                "type": "verification", 
+                "data": json.dumps({
+                    "overall_score": f"{final_report.overall_score * 100:.1f}%",
+                    "overall_label": final_report.overall_label,
+                    "flagged_sections": final_report.flagged_sections,
+                    "total_sections": len(final_report.section_scores),
+                    "section_scores": [] # individual scores already sent via verification_section
+                })
+            }
+        except Exception as e:
+            logger.error(f"Error yielding verification json: {e}")
+
+        yield {"type": "complete", "data": "Translation pipeline complete."}
+
+
+    finally:
+        # Cleanup
+        try:
+            if 'uploaded_file' in locals():
+                genai.delete_file(uploaded_file.name)
+        except Exception as e:
+            logger.error(f"Failed to delete file from Google APIs: {e}")
+            
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass

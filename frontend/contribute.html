@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contribute terms — PeerTranslate</title>
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+    
+    <style>
+        .contribute-container {
+            max-width: 800px;
+            margin: 4rem auto;
+            padding: 2rem;
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-glass);
+            box-shadow: var(--shadow-md);
+        }
+        
+        .header-text {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .term-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            align-items: center;
+        }
+        
+        .term-input {
+            flex: 1;
+            padding: 0.8rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-glass);
+            color: var(--text-primary);
+            border-radius: var(--radius-sm);
+        }
+        
+        .btn-remove {
+            background: rgba(244, 63, 94, 0.1);
+            color: var(--accent-rose);
+            border: 1px solid rgba(244, 63, 94, 0.3);
+            cursor: pointer;
+            padding: 0.8rem;
+            border-radius: var(--radius-sm);
+            font-weight: bold;
+        }
+        
+        .btn-add {
+            width: 100%;
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px dashed var(--border-glass);
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            margin-bottom: 2rem;
+            font-weight: bold;
+        }
+        
+        .btn-add:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+        
+        .btn-submit {
+            width: 100%;
+            padding: 1rem;
+            background: var(--gradient-primary);
+            color: #0a0e1a;
+            border: none;
+            border-radius: var(--radius-pill);
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .github-notice {
+            margin-top: 1rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="/" class="nav-brand">
+                <span class="nav-logo">📄 PeerTranslate</span>
+            </a>
+            <div class="nav-links">
+                <a href="/" class="nav-link">Home</a>
+                <a href="https://github.com/muminul-hoque/PeerTranslate" target="_blank" class="github-star-btn">⭐ Star on GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="contribute-container">
+        <div class="header-text">
+            <h1>Expert Terminology Contribution</h1>
+            <p style="color: var(--text-secondary);">Help us improve translations! You don't need to be a coder. Add standard translations for academic terms in your language, and they will be verified and added to our global AI glossaries.</p>
+        </div>
+
+        <form id="contribute-form">
+            <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
+                <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted);">Target Language</label>
+                    <input type="text" id="lang-input" class="term-input" placeholder="e.g., Bengali (বাংলা)" required>
+                </div>
+                <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted);">Academic Domain</label>
+                    <select id="domain-input" class="term-input" required onchange="toggleCustomDomain()">
+                        <option value="" disabled selected>Select a mapped field...</option>
+                        <optgroup label="Formal Sciences">
+                            <option value="cs">Computer Science (cs)</option>
+                            <option value="ml">Machine Learning / AI (ml)</option>
+                            <option value="math">Mathematics (math)</option>
+                            <option value="statistics">Statistics (statistics)</option>
+                        </optgroup>
+                        <optgroup label="Natural Sciences">
+                            <option value="physics">Physics (physics)</option>
+                            <option value="astronomy">Astronomy (astronomy)</option>
+                            <option value="chemistry">Chemistry (chemistry)</option>
+                            <option value="biology">Biology (biology)</option>
+                            <option value="earth_sciences">Earth Sciences (earth_sciences)</option>
+                        </optgroup>
+                        <optgroup label="Applied Sciences">
+                            <option value="medicine">Medicine (medicine)</option>
+                            <option value="engineering">Engineering (engineering)</option>
+                            <option value="materials_science">Materials Science (materials_science)</option>
+                            <option value="agriculture">Agriculture (agriculture)</option>
+                        </optgroup>
+                        <optgroup label="Social Sciences">
+                            <option value="economics">Economics (economics)</option>
+                            <option value="psychology">Psychology (psychology)</option>
+                            <option value="sociology">Sociology (sociology)</option>
+                            <option value="political_science">Political Science (political_science)</option>
+                        </optgroup>
+                        <optgroup label="Humanities & Other">
+                            <option value="law">Law (law)</option>
+                            <option value="business">Business (business)</option>
+                            <option value="linguistics">Linguistics (linguistics)</option>
+                            <option value="general_academic">General Academic (general_academic)</option>
+                        </optgroup>
+                        <optgroup label="Custom Options">
+                            <option value="custom">Other (Specify Niche Field...)</option>
+                        </optgroup>
+                    </select>
+                    <input type="text" id="custom-domain-input" class="term-input" placeholder="e.g. quantum_computing" style="display: none; margin-top: 0.5rem;">
+                </div>
+            </div>
+
+            <h3 style="margin-bottom: 1rem;">Glossary Terms</h3>
+            <div id="terms-container">
+                <!-- Rows injected by JS -->
+            </div>
+            
+            <button type="button" class="btn-add" id="add-term-btn">+ Add Another Term</button>
+            
+            <button type="submit" class="btn-submit">Submit to Review Queue</button>
+            <p class="github-notice">This will safely open a pre-filled GitHub issue for our maintainers to review. No account required to draft, though GitHub account needed to post.</p>
+        </form>
+    </div>
+
+    <script>
+        const container = document.getElementById('terms-container');
+        const addBtn = document.getElementById('add-term-btn');
+        const form = document.getElementById('contribute-form');
+
+        function addRow() {
+            const row = document.createElement('div');
+            row.className = 'term-row';
+            row.innerHTML = `
+                <input type="text" class="term-input english-term" placeholder="English Term (e.g., 'backpropagation')" required>
+                <span style="color: var(--text-muted);">→</span>
+                <input type="text" class="term-input target-term" placeholder="Translated Term" required>
+                <button type="button" class="btn-remove">✕</button>
+            `;
+            
+            row.querySelector('.btn-remove').addEventListener('click', () => {
+                if(container.children.length > 1) row.remove();
+            });
+            
+            container.appendChild(row);
+        }
+
+        // Add 3 rows initially
+        addRow();
+        addRow();
+        addRow();
+
+        addBtn.addEventListener('click', addRow);
+
+        function toggleCustomDomain() {
+            const select = document.getElementById('domain-input');
+            const customInput = document.getElementById('custom-domain-input');
+            if (select.value === 'custom') {
+                customInput.style.display = 'block';
+                customInput.required = true;
+            } else {
+                customInput.style.display = 'none';
+                customInput.required = false;
+            }
+        }
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const lang = document.getElementById('lang-input').value;
+            const domainSelect = document.getElementById('domain-input').value;
+            const domain = domainSelect === 'custom' 
+                ? document.getElementById('custom-domain-input').value 
+                : domainSelect;
+            
+            const engInputs = document.querySelectorAll('.english-term');
+            const tgtInputs = document.querySelectorAll('.target-term');
+            
+            let markdownList = '';
+            for(let i=0; i < engInputs.length; i++) {
+                if(engInputs[i].value.trim() && tgtInputs[i].value.trim()) {
+                    markdownList += `- **${engInputs[i].value.trim()}**: ${tgtInputs[i].value.trim()}\n`;
+                }
+            }
+
+            const title = `feat(glossary): New terms for ${lang} - ${domain}`;
+            const body = `### Expert Glossary Contribution\n\n**Language**: ${lang}\n**Domain**: ${domain}\n\n### Proposed Terms:\n\n${markdownList}\n\n---\n*Submitted via PeerTranslate Web Contribute*`;
+            
+            const githubUrl = `https://github.com/muminul-hoque/PeerTranslate/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=glossary%20contribution`;
+            
+            window.open(githubUrl, '_blank');
+        });
+    </script>
+</body>
+</html>

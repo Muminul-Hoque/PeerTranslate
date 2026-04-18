@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+  peertranslate:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./glossaries:/app/glossaries
+    restart: unless-stopped

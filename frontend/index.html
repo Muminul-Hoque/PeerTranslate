@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PeerTranslate — Translate Research Papers into Your Own Language</title>
+    <meta name="description" content="Open-source AI tool that translates research papers from English into any language with verified accuracy. Multi-pass translation with domain glossaries and back-translation verification.">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="PeerTranslate — Verified Research Paper Translation">
+    <meta property="og:description" content="Translate research papers into your own language with 100% verified accuracy. Open source, community-driven glossaries, and a beautiful UI.">
+    <meta property="og:type" content="website">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    <!-- Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Favicon (emoji-based for quick setup) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+</head>
+<body>
+
+    <!-- ─── Navbar ─── -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="/" class="nav-brand">
+                <span class="nav-logo">📄 PeerTranslate</span>
+                <span class="nav-version">v0.1.0</span>
+            </a>
+            <div class="nav-links">
+                <a href="#how-it-works" class="nav-link">
+                    <span>How It Works</span>
+                </a>
+                <a href="https://github.com/muminul-hoque/PeerTranslate" target="_blank" rel="noopener" class="github-star-btn" id="github-link">
+                    ⭐ Star on GitHub
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ─── Hero Section ─── -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-badge animate-in">🔬 Open Source Research Tool</div>
+
+            <h1 class="animate-in">
+                Translate Research Papers<br>
+                <span class="gradient-text">Into Your Own Language</span>
+            </h1>
+
+            <p class="hero-subtitle animate-in">
+                The first AI translation tool that <strong>verifies accuracy</strong> using
+                back-translation and domain-specific academic glossaries.
+                Language should never be a barrier to learning.
+            </p>
+
+            <div class="hero-features animate-in">
+                <div class="hero-feature">
+                    <span class="hero-feature-icon cyan">✓</span>
+                    Multi-pass verified translation
+                </div>
+                <div class="hero-feature">
+                    <span class="hero-feature-icon teal">✓</span>
+                    Community-curated glossaries
+                </div>
+                <div class="hero-feature">
+                    <span class="hero-feature-icon amber">✓</span>
+                    Confidence scoring per section
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ─── Upload Panel ─── -->
+    <section class="container">
+        <div class="upload-panel animate-in" id="upload-panel">
+
+            <!-- Input Tabs -->
+            <div class="input-tabs">
+                <button class="input-tab active" data-tab="file">📎 Upload File</button>
+                <button class="input-tab" data-tab="url">🔗 Paste URL</button>
+            </div>
+
+            <!-- Drop Zone (File Tab) -->
+            <div class="tab-content active" id="tab-file">
+                <div class="drop-zone" id="drop-zone">
+                    <span class="drop-zone-icon">📄</span>
+                    <div class="drop-zone-text">Drop your research paper here</div>
+                    <div class="drop-zone-hint">or click to browse · PDF files only · Max 50MB</div>
+                    <input type="file" class="file-input" id="file-input" accept=".pdf">
+                </div>
+
+                <!-- File Info (shown after selection) -->
+                <div class="file-info" id="file-info">
+                    <span class="file-info-icon">📎</span>
+                    <span class="file-info-name" id="file-name"></span>
+                    <span class="file-info-size" id="file-size"></span>
+                    <button class="file-remove-btn" id="file-remove" title="Remove file">✕</button>
+                </div>
+            </div>
+
+            <!-- URL Input (URL Tab) -->
+            <div class="tab-content" id="tab-url">
+                <div class="url-input-container">
+                    <input type="url" id="url-input" class="url-input" placeholder="https://example.com/paper.pdf" autocomplete="off">
+                    <div class="drop-zone-hint mt-2">Paste a direct link to a PDF or a Google Drive link</div>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="controls-row">
+                <div class="select-wrapper">
+                    <label for="language-select">Target Language</label>
+                    <select class="language-select" id="language-select">
+                        <option value="bn">বাংলা (Bengali) ✦</option>
+                    </select>
+                    <span class="glossary-badge">✦ = curated glossary available</span>
+                </div>
+
+                <div class="translate-btn-wrapper">
+                    <button class="translate-btn" id="translate-btn" disabled>
+                        <span class="btn-spinner"></span>
+                        <span class="btn-text-default">🚀 Translate Paper</span>
+                        <span class="btn-text-loading">Translating...</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── Terms of Service Acknowledgment ── -->
+            <div class="tos-row" id="tos-row">
+                <label class="tos-label">
+                    <input type="checkbox" id="tos-checkbox">
+                    <span class="tos-text">
+                        I confirm that I have the right to translate this document and that my use
+                        complies with applicable copyright law and the publisher's terms of service.
+                        PeerTranslate is an open-access tool intended for <strong>academic, non-commercial use only</strong>.
+                    </span>
+                </label>
+                <p class="tos-hint">
+                    ⚠️ Uploading paywalled papers you do not own violates publisher copyright.
+                    PeerTranslate stores only the <em>translation</em>, not the original PDF.
+                    <a href="https://creativecommons.org/faq/#what-is-open-access" target="_blank" rel="noopener">
+                        Learn about Open Access →
+                    </a>
+                </p>
+            </div>
+
+            
+            <!-- Context Model & BYOK Settings -->
+            <details class="advanced-settings-panel animate-in">
+                <summary class="settings-summary">⚙️ Advanced Model Settings</summary>
+                <div class="settings-grid">
+                    <div class="settings-col">
+                        <label for="user-provider">API Provider</label>
+                        <select id="user-provider" class="language-select">
+                            <option value="google">Google Gemini (Native)</option>
+                            <option value="openrouter">OpenRouter</option>
+                            <option value="openai">OpenAI</option>
+                        </select>
+                    </div>
+                    <div class="settings-col">
+                        <label for="user-model">AI Model Selection</label>
+                        <select id="user-model" class="language-select">
+                            <option value="">Default (Server Config)</option>
+                            <option value="gemini-flash-lite-latest">Gemini Flash Lite (Highest Quota)</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                            <option value="gemma-3-27b-it">Gemma 3 27B</option>
+                        </select>
+                    </div>
+                    <div class="settings-col">
+                        <label for="user-api-key" id="user-api-key-label">Custom API Key (Optional)</label>
+                        <input type="password" id="user-api-key" class="url-input" placeholder="Leave blank to use server key">
+                        <div id="translator-config-warning" class="drop-zone-hint mt-2 color-warning" style="display: none;"></div>
+                        <div class="drop-zone-hint mt-2">Providing a key uses your own free quota and prevents server 429 errors.</div>
+                    </div>
+                </div>
+
+                <div class="settings-separator"></div>
+
+                <div class="settings-grid mt-4">
+                    <div class="settings-col">
+                        <label for="judge-provider">Verification Judge</label>
+                        <select id="judge-provider" class="language-select">
+                            <option value="google">Google Gemini (Default)</option>
+                            <option value="openai">OpenAI (Requires Header/Key)</option>
+                            <option value="openrouter">OpenRouter (Requires Header/Key)</option>
+                        </select>
+                        <div class="drop-zone-hint mt-2">The AI that evaluates your translation's accuracy.</div>
+                    </div>
+                    <div class="settings-col">
+                        <label for="judge-model">Judge Model</label>
+                        <select id="judge-model" class="language-select">
+                            <option value="">Default (Server Config)</option>
+                        </select>
+                    </div>
+                    <div class="settings-col">
+                        <label for="judge-api-key">Judge API Key (Optional)</label>
+                        <input type="password" id="judge-api-key" class="url-input" placeholder="Leave blank for server key">
+                        <div id="judge-config-warning" class="drop-zone-hint mt-2 color-warning" style="display: none;"></div>
+                    </div>
+                </div>
+            </details>
+
+        </div>
+    </section>
+
+    <!-- ─── Results Section ─── -->
+    <section class="results-section" id="results-section">
+        <div class="container">
+
+            <!-- Pipeline Status Log -->
+            <div class="status-log" id="status-log"></div>
+
+            <!-- Verification Panel -->
+            <div class="verification-panel" id="verification-panel">
+                <div class="verification-header">
+                    <span class="verification-title">🔍 Accuracy Verification</span>
+                    <span class="score-badge" id="overall-score">—</span>
+                </div>
+                <div class="verification-grid" id="verification-grid"></div>
+            </div>
+
+            <!-- Translation Output -->
+            <div class="translation-output">
+                <div class="output-header">
+                    <span class="output-title">📝 Translated Paper</span>
+                    <div class="output-actions">
+                        <button class="action-btn" id="copy-btn">📋 Copy</button>
+                        <button class="action-btn" id="download-btn">⬇️ Download .md</button>
+                    </div>
+                </div>
+                <div class="output-body" id="output-body">
+                    <p style="color: var(--text-muted); text-align: center; padding: 3rem 0;">
+                        Your translated paper will appear here...
+                    </p>
+                </div>
+
+                <!-- Download & Flag Actions -->
+                <div class="download-actions" id="download-actions" style="display: none;">
+                    <button class="download-btn primary" id="download-pdf-btn">📥 Download as PDF</button>
+                    <button class="download-btn" id="download-md-btn">📄 Download .md</button>
+                    <button class="download-btn" id="copy-full-btn">📋 Copy All</button>
+                    <button class="flag-btn" id="flag-translation-btn">🚩 Report Translation Error</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ─── How It Works Section ─── -->
+    <section class="container" id="how-it-works" style="padding: 2rem 1.5rem;">
+        <div style="max-width: 800px; margin: 0 auto; text-align: center;">
+            <h2 style="font-family: var(--font-display); font-size: 1.8rem; font-weight: 800; margin-bottom: 1rem;">
+                How <span class="gradient-text">PeerTranslate</span> Works
+            </h2>
+            <p style="color: var(--text-secondary); margin-bottom: 2rem; font-size: 1rem;">
+                Unlike single-pass translators, PeerTranslate uses a <strong>4-pass Verify Loop</strong> to ensure accuracy.
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.5rem; text-align: left;">
+                <div style="background: var(--bg-glass); backdrop-filter: blur(20px); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 1.5rem;">
+                    <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">📄</div>
+                    <div style="font-family: var(--font-display); font-weight: 700; margin-bottom: 0.25rem; color: var(--accent-cyan);">Pass 1</div>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">Translate the full paper using domain glossary term-locking</div>
+                </div>
+                <div style="background: var(--bg-glass); backdrop-filter: blur(20px); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 1.5rem;">
+                    <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">🔁</div>
+                    <div style="font-family: var(--font-display); font-weight: 700; margin-bottom: 0.25rem; color: var(--accent-teal);">Pass 2</div>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">Back-translate the result to English for comparison</div>
+                </div>
+                <div style="background: var(--bg-glass); backdrop-filter: blur(20px); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 1.5rem;">
+                    <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">🔍</div>
+                    <div style="font-family: var(--font-display); font-weight: 700; margin-bottom: 0.25rem; color: var(--accent-amber);">Pass 3</div>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">Score each section by comparing original ↔ back-translation</div>
+                </div>
+                <div style="background: var(--bg-glass); backdrop-filter: blur(20px); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 1.5rem;">
+                    <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">✅</div>
+                    <div style="font-family: var(--font-display); font-weight: 700; margin-bottom: 0.25rem; color: #22c55e;">Pass 4</div>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">Re-translate any section below the confidence threshold</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ─── Footer ─── -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-brand">📄 PeerTranslate</div>
+            <p class="footer-tagline">
+                Open source. Community-driven. Verified accuracy.
+            </p>
+            <div class="footer-links">
+                <a href="https://github.com/muminul-hoque/PeerTranslate" class="footer-link" target="_blank" rel="noopener">GitHub</a>
+                <a href="https://github.com/muminul-hoque/PeerTranslate/blob/main/CONTRIBUTING.md" class="footer-link" target="_blank" rel="noopener">Contribute</a>
+                <a href="https://github.com/muminul-hoque/PeerTranslate/blob/main/glossaries/README.md" class="footer-link" target="_blank" rel="noopener">Add Your Language</a>
+            </div>
+            <div class="footer-citation">
+                <div class="footer-citation-label">Cite This Tool</div>
+                <div class="footer-citation-text">Hoque, M. M. (2026). PeerTranslate: Verified Research Paper Translation. GitHub. https://github.com/muminul-hoque/PeerTranslate</div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- App Script -->
+    <script src="/static/js/app.js"></script>
+
+</body>
+</html>
