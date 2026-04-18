@@ -53,7 +53,7 @@ class Settings:
         default_factory=lambda: os.getenv("GEMINI_API_KEY", "")
     )
     gemini_model: str = field(
-        default_factory=lambda: os.getenv("GEMINI_MODEL", "gemma-3-27b-it")
+        default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
     )
     turso_database_url: str = field(
         default_factory=lambda: os.getenv("TURSO_DATABASE_URL", "")
