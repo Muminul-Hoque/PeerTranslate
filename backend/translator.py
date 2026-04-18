@@ -270,7 +270,8 @@ async def translate_paper(
             yield {"type": "status", "data": "✅ PDF uploaded successfully. Extracting structural text..."}
 
             # 3. Pass 0 - Extract Markdown Context (Strict Integrity Mode)
-            extraction_model = genai.GenerativeModel("gemini-2.0-flash-lite-001") 
+            # Downgraded from 2.0 to 1.5-flash because 1.5-flash has an incredibly generous free tier (1,500 RPM)
+            extraction_model = genai.GenerativeModel("gemini-1.5-flash")
             
             extract_response = None
             last_exception = None
