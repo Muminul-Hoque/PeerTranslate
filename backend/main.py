@@ -24,7 +24,7 @@ from backend.config import (
 )
 from backend.glossary import get_available_glossaries, load_glossary
 from backend.translator import translate_paper
-from backend.cache import flag_translation
+from backend.cache import flag_translation, _get_db
 
 # Configure logging
 logging.basicConfig(
@@ -75,10 +75,10 @@ class TermContribution(BaseModel):
     contributor_name: str
     terms: dict
 
+
 @app.post("/api/contribute")
 async def submit_contribution(data: TermContribution):
     """Save an inline glossary contribution to the pending database."""
-    from backend.cache import _get_db
     try:
         conn = _get_db()
         cursor = conn.cursor()
