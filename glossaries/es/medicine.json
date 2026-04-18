@@ -1,0 +1,16 @@
+{
+    "domain": "medicine",
+    "language": "es",
+    "version": "1.0.0",
+    "contributors": [
+        "Antigravity Root Generation"
+    ],
+    "terms": {
+        "vaccine": "vacuna (vaccine)",
+        "pathogen": "patógeno (pathogen)",
+        "antibody": "anticuerpo (antibody)",
+        "diagnosis": "diagnóstico (diagnosis)",
+        "epidemiology": "epidemiología (epidemiology)",
+        "oncology": "oncología (oncology)"
+    }
+}

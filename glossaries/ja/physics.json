@@ -1,0 +1,12 @@
+{
+    "domain": "physics",
+    "language": "ja",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "quantum mechanics": "量子力学 (quantum mechanics)",
+        "relativity": "相対性理論 (relativity)"
+    }
+}

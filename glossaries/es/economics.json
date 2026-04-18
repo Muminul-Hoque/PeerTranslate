@@ -1,0 +1,12 @@
+{
+    "domain": "economics",
+    "language": "es",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "inflation": "inflación",
+        "gross domestic product": "producto interno bruto (gross domestic product)"
+    }
+}

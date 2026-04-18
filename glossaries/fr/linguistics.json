@@ -1,0 +1,12 @@
+{
+    "domain": "linguistics",
+    "language": "fr",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "syntax": "syntaxe",
+        "phonetics": "phonétique"
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "domain": "political_science",
+    "language": "ja",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "democracy": "民主主義",
+        "foreign policy": "外交政策"
+    }
+}

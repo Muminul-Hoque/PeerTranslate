@@ -1,0 +1,12 @@
+{
+    "domain": "political_science",
+    "language": "es",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "democracy": "democracia",
+        "foreign policy": "política exterior"
+    }
+}

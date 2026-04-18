@@ -1,0 +1,12 @@
+{
+    "domain": "chemistry",
+    "language": "ja",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "molecule": "分子",
+        "covalent bond": "共有結合"
+    }
+}

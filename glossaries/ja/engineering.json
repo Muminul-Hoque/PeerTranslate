@@ -1,0 +1,12 @@
+{
+    "domain": "engineering",
+    "language": "ja",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "thermodynamics": "熱力学 (thermodynamics)",
+        "fluid dynamics": "流体力学 (fluid dynamics)"
+    }
+}

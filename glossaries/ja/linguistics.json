@@ -1,0 +1,12 @@
+{
+    "domain": "linguistics",
+    "language": "ja",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "syntax": "統語論",
+        "phonetics": "音声学"
+    }
+}

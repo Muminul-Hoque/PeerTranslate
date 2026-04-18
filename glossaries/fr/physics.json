@@ -1,0 +1,15 @@
+{
+    "domain": "physics",
+    "language": "fr",
+    "version": "1.0.0",
+    "contributors": [
+        "Antigravity Root Generation"
+    ],
+    "terms": {
+        "quantum mechanics": "mécanique quantique (quantum mechanics)",
+        "relativity": "relativité (relativity)",
+        "thermodynamics": "thermodynamique (thermodynamics)",
+        "momentum": "quantité de mouvement (momentum)",
+        "gravity": "gravité (gravity)"
+    }
+}

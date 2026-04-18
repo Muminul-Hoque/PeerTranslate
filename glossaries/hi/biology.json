@@ -1,0 +1,12 @@
+{
+    "domain": "biology",
+    "language": "hi",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "genome": "जीनोम (genome)",
+        "mitosis": "समसूत्री विभाजन (mitosis)"
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "domain": "materials_science",
+    "language": "ja",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "semiconductor": "半導体 (semiconductor)",
+        "polymer": "高分子 (polymer)"
+    }
+}

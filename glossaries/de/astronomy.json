@@ -1,0 +1,12 @@
+{
+    "domain": "astronomy",
+    "language": "de",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "black hole": "Schwarzes Loch",
+        "redshift": "Rotverschiebung"
+    }
+}

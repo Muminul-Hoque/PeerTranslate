@@ -1,0 +1,12 @@
+{
+    "domain": "astronomy",
+    "language": "es",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "black hole": "agujero negro",
+        "redshift": "desplazamiento al rojo"
+    }
+}

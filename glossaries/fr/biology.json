@@ -1,0 +1,12 @@
+{
+    "domain": "biology",
+    "language": "fr",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "genome": "génome",
+        "mitosis": "mitose"
+    }
+}

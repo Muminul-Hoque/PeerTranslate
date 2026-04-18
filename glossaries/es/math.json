@@ -1,0 +1,12 @@
+{
+    "domain": "math",
+    "language": "es",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "topology": "topología",
+        "calculus": "cálculo"
+    }
+}

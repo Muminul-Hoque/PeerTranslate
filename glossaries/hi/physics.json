@@ -1,0 +1,15 @@
+{
+    "domain": "physics",
+    "language": "hi",
+    "version": "1.0.0",
+    "contributors": [
+        "Antigravity Root Generation"
+    ],
+    "terms": {
+        "quantum mechanics": "क्वांटम यांत्रिकी (quantum mechanics)",
+        "relativity": "सापेक्षता (relativity)",
+        "thermodynamics": "ऊष्मागतिकी (thermodynamics)",
+        "momentum": "संवेग (momentum)",
+        "gravity": "गुरुत्वाकर्षण (gravity)"
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "domain": "economics",
+    "language": "fr",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "inflation": "inflation",
+        "gross domestic product": "produit intérieur brut (PIB)"
+    }
+}

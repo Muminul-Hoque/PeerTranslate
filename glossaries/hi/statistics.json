@@ -1,0 +1,12 @@
+{
+    "domain": "statistics",
+    "language": "hi",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "p-value": "पी-वैल्यू (p-value)",
+        "variance": "प्रसरण"
+    }
+}

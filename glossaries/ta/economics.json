@@ -1,0 +1,12 @@
+{
+    "domain": "economics",
+    "language": "ta",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "inflation": "பணவீக்கம்",
+        "gross domestic product": "மொத்த உள்நாட்டு உற்பத்தி (GDP)"
+    }
+}

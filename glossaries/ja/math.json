@@ -1,0 +1,12 @@
+{
+    "domain": "math",
+    "language": "ja",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "topology": "位相幾何学 (topology)",
+        "calculus": "微積分学 (calculus)"
+    }
+}

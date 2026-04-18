@@ -1,0 +1,12 @@
+{
+    "domain": "medicine",
+    "language": "ja",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "vaccine": "ワクチン (vaccine)",
+        "pathogen": "病原体 (pathogen)"
+    }
+}

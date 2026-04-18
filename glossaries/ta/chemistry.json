@@ -1,0 +1,12 @@
+{
+    "domain": "chemistry",
+    "language": "ta",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "molecule": "மூலக்கூறு",
+        "covalent bond": "சகப்பிணைப்பு"
+    }
+}

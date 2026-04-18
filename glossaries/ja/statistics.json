@@ -1,0 +1,12 @@
+{
+    "domain": "statistics",
+    "language": "ja",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "p-value": "p値 (p-value)",
+        "variance": "分散 (variance)"
+    }
+}

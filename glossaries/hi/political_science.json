@@ -1,0 +1,12 @@
+{
+    "domain": "political_science",
+    "language": "hi",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "democracy": "लोकतंत्र",
+        "foreign policy": "विदेश नीति"
+    }
+}

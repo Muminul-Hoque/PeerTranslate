@@ -1,0 +1,12 @@
+{
+    "domain": "statistics",
+    "language": "es",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "p-value": "valor p (p-value)",
+        "variance": "varianza"
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "domain": "medicine",
+    "language": "hi",
+    "version": "1.0.0",
+    "contributors": [
+        "Antigravity Root Generation"
+    ],
+    "terms": {
+        "vaccine": "टीका (vaccine)",
+        "pathogen": "रोगजनक (pathogen)",
+        "antibody": "प्रतिपिंड (antibody)",
+        "diagnosis": "रोग का निदान (diagnosis)",
+        "epidemiology": "महामारी विज्ञान (epidemiology)",
+        "oncology": "अर्बुद विज्ञान (oncology)"
+    }
+}

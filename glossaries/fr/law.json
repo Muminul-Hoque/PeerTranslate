@@ -1,0 +1,12 @@
+{
+    "domain": "law",
+    "language": "fr",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "jurisprudence": "jurisprudence",
+        "constitutional rights": "droits constitutionnels"
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "domain": "materials_science",
+    "language": "fr",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "semiconductor": "semi-conducteur",
+        "polymer": "polymère"
+    }
+}

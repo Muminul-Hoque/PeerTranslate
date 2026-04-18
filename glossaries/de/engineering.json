@@ -1,0 +1,12 @@
+{
+    "domain": "engineering",
+    "language": "de",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "thermodynamics": "Thermodynamik",
+        "fluid dynamics": "Fluiddynamik"
+    }
+}

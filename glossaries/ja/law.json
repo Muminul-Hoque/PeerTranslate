@@ -1,0 +1,12 @@
+{
+    "domain": "law",
+    "language": "ja",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "jurisprudence": "法学",
+        "constitutional rights": "憲法上の権利"
+    }
+}

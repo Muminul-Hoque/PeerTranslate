@@ -1,0 +1,12 @@
+{
+    "domain": "materials_science",
+    "language": "de",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "semiconductor": "Halbleiter",
+        "polymer": "Polymer"
+    }
+}

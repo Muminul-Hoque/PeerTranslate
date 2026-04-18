@@ -1,0 +1,12 @@
+{
+    "domain": "chemistry",
+    "language": "hi",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "molecule": "अणु",
+        "covalent bond": "सहसंयोजी बंधन"
+    }
+}

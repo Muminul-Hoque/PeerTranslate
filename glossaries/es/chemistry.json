@@ -1,0 +1,12 @@
+{
+    "domain": "chemistry",
+    "language": "es",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "molecule": "molécula",
+        "covalent bond": "enlace covalente"
+    }
+}

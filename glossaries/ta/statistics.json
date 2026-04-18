@@ -1,0 +1,12 @@
+{
+    "domain": "statistics",
+    "language": "ta",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "p-value": "பி-மதிப்பு (p-value)",
+        "variance": "மாறுபாடு (variance)"
+    }
+}

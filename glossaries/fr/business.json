@@ -1,0 +1,12 @@
+{
+    "domain": "business",
+    "language": "fr",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "marketing": "marketing (marketing)",
+        "supply chain": "chaîne d'approvisionnement (supply chain)"
+    }
+}

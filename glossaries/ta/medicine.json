@@ -1,0 +1,12 @@
+{
+    "domain": "medicine",
+    "language": "ta",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "vaccine": "தடுப்பூசி",
+        "pathogen": "நோய்க்கிருமி (pathogen)"
+    }
+}

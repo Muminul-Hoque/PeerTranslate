@@ -1,0 +1,12 @@
+{
+    "domain": "biology",
+    "language": "ja",
+    "version": "1.0.0",
+    "contributors": [
+        "PeerTranslate AI"
+    ],
+    "terms": {
+        "genome": "ゲノム (genome)",
+        "mitosis": "有糸分裂 (mitosis)"
+    }
+}
