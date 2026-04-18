@@ -309,7 +309,7 @@ async def translate_paper(
             async def _gemini_enhance():
                 genai.configure(api_key=extraction_api_key)
                 uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
-                extraction_model = genai.GenerativeModel("gemini-1.5-flash")
+                extraction_model = genai.GenerativeModel("gemini-2.5-flash")
                 response = await extraction_model.generate_content_async(
                     [
                         "MISSION: HIGH-FIDELITY ACADEMIC EXTRACTION\n"
