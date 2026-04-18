@@ -259,8 +259,9 @@ async def translate_paper(
         yield {"type": "status", "data": f"✅ Found {len(extracted_figures)} high-res figures."}
 
     try:
-        # Always use Google for extraction, using Server Key so user quota isn't burned.
-        genai.configure(api_key=settings.gemini_api_key)
+        # Check if user provided their own Google key. If so, use it to bypass server quota limits.
+        extraction_api_key = api_key if (user_provider == "google" and api_key) else settings.gemini_api_key
+        genai.configure(api_key=extraction_api_key)
         uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
         yield {"type": "status", "data": "✅ PDF uploaded successfully. Extracting structural text..."}
 
