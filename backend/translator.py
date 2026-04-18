@@ -270,8 +270,8 @@ async def translate_paper(
             yield {"type": "status", "data": "✅ PDF uploaded successfully. Extracting structural text..."}
 
             # 3. Pass 0 - Extract Markdown Context (Strict Integrity Mode)
-            # Downgraded from 2.0 to 1.5-flash because 1.5-flash has an incredibly generous free tier (1,500 RPM)
-            extraction_model = genai.GenerativeModel("gemini-1.5-flash")
+            # Downgraded from 2.0 to 1.5-flash-latest because it has a massive free tier quota.
+            extraction_model = genai.GenerativeModel("gemini-1.5-flash-latest")
             
             extract_response = None
             last_exception = None
@@ -312,10 +312,10 @@ async def translate_paper(
             original_english_text = extract_response.text
 
         except Exception as google_err:
-            # INTERCEPT ALL GOOGLE EXHAUSTION/KEY ERRORS HERE FOR THE FALLBACK
-            err_msg = str(google_err).lower()
-            if "quota" in err_msg or "exceeded" in err_msg or "invalid" in err_msg or "400" in err_msg:
-                yield {"type": "warning", "data": "⚠️ Google API Quota Exhausted! Falling back to offline local extractor (PyMuPDF)..."}
+            # INTERCEPT ALL GOOGLE ERRORS HERE FOR THE FALLBACK
+            err_msg = str(google_err)
+            yield {"type": "warning", "data": f"⚠️ Google PDF API Failed ({err_msg[:30]}...). Stripping text offline instead (PyMuPDF)..."}
+            try:
                 import fitz
                 doc = fitz.open(tmp_path)
                 original_english_text = ""
@@ -324,8 +324,8 @@ async def translate_paper(
                 
                 if not original_english_text.strip():
                     raise Exception("Offline fallback could not read any text from the PDF.")
-            else:
-                raise google_err
+            except Exception as fallback_err:
+                raise Exception(f"Both Google Extraction and Offline Fallback failed: {str(fallback_err)}")
 
         if not original_english_text:
             yield {"type": "error", "data": "Failed to extract text from PDF."}
