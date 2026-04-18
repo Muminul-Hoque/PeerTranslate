@@ -299,12 +299,17 @@ async def translate_paper(
     extraction_api_key = api_key if (user_provider == "google" and api_key) else settings.gemini_api_key
     if extraction_api_key:
         try:
+            genai.configure(api_key=extraction_api_key)
+            # DIAGNOSTIC: Fetch valid models and show on screen to debug the 404
+            available_models = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods and 'flash' in m.name]
+            yield {"type": "status", "data": f"🔍 Valid Google Models on this key: {', '.join(available_models[:10])}..."}
+        
             yield {"type": "status", "data": "✨ Attempting Gemini enhancement for better structure..."}
             
             async def _gemini_enhance():
                 genai.configure(api_key=extraction_api_key)
                 uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
-                extraction_model = genai.GenerativeModel("gemini-3.1-flash-lite")
+                extraction_model = genai.GenerativeModel("gemini-1.5-flash")
                 response = await extraction_model.generate_content_async(
                     [
                         "MISSION: HIGH-FIDELITY ACADEMIC EXTRACTION\n"
