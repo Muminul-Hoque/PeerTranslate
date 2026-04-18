@@ -302,14 +302,21 @@ async def translate_paper(
                 await asyncio.sleep(wait_time)
                 
         if not extract_response:
-            err_msg = str(last_exception)
-            if "quota" in err_msg.lower():
-                yield {"type": "error", "data": "Google Free Tier Quota Exhausted! Please generate a new API key from AI Studio or upgrade your account tier."}
-                return
+            err_msg = str(last_exception).lower()
+            if "quota" in err_msg or "exceeded" in err_msg or "invalid" in err_msg:
+                yield {"type": "warning", "data": "⚠️ Google API Quota Exhausted! Falling back to offline fallback extractor (PyMuPDF)..."}
+                import fitz
+                doc = fitz.open(tmp_path)
+                original_english_text = ""
+                for page in doc:
+                    original_english_text += page.get_text("text") + "\n\n"
+                
+                if not original_english_text.strip():
+                    raise Exception("Offline fallback could not read any text from the PDF.")
             else:
                 raise last_exception or Exception("Failed to extract text from PDF after 5 attempts.")
-
-        original_english_text = extract_response.text
+        else:
+            original_english_text = extract_response.text
 
         if not original_english_text:
             yield {"type": "error", "data": "Failed to extract text from PDF."}
