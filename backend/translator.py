@@ -278,61 +278,60 @@ async def translate_paper(
                 genai.configure(api_key=extraction_api_key)
                 uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
 
-            # 3. Pass 0 - Extract Markdown Context (Strict Integrity Mode)
-            # Switch to gemini-1.5-flash-8b (Lite) - attempting exact string to avoid 404
-            extraction_model = genai.GenerativeModel("gemini-1.5-flash-8b")
-            
-            extract_response = None
-            last_exception = None
-            for attempt in range(5):
-                try:
-                    extract_response = await extraction_model.generate_content_async(
-                        [
-                            "MISSION: HIGH-FIDELITY ACADEMIC EXTRACTION\n"
-                            "YOUR TASK: Extract the raw text from this PDF with 100% literal accuracy into Markdown format.\n\n"
-                            "CRITICAL CONSTRAINTS (VIOLATION WILL RESULT IN SYSTEM FAILURE):\n"
-                            "1. DO NOT summarize. DO NOT simplify. DO NOT invent citations. YOU MUST extract the literal text as written.\n"
-                            "2. DO NOT add sections that do not exist (e.g. if the paper is a study, do not invent a 'Methods' or 'Results' block).\n"
-                            "3. PRESERVE ALL TECHNICAL JARGON EXACTLY AS IS.\n"
-                            "4. DEDUPLICATE: If the Abstract appears twice, extract it ONLY ONCE.\n"
-                            "5. PRESERVE STRUCTURE: Use precise Markdown hierarchy (#, ##, ###).\n\n"
-                            "Return ONLY the literal extracted Markdown text.",
-                            uploaded_file,
-                        ],
-                        generation_config=genai.types.GenerationConfig(
-                            temperature=0.0,
-                            max_output_tokens=65536,
-                        ),
-                    )
-                    break
-                except Exception as e:
-                    last_exception = e
-                    err_msg = str(e).lower()
-                    
-                    # If Google is totally dead or blocking us, don't waste time retrying.
-                    if any(err in err_msg for err in ["quota", "exceeded", "429", "invalid", "503", "400", "404", "not found"]):
-                        break
-                        
-                    wait_time = (attempt + 1) * 5
-                    logger.warning(f"Google API Error: {str(e)[:50]}... Retrying in {wait_time}s...")
-                    yield {"type": "status", "data": f"⏳ Google API Error ({str(e)[:40]})... Retrying (Attempt {attempt+2}/5)"}
-                    await asyncio.sleep(wait_time)
-                    
-            if not extract_response:
-                raise last_exception or Exception("Gemini enhancement unavailable.")
+                # Pass 0 - Extract Markdown Context (Strict Integrity Mode)
+                extraction_model = genai.GenerativeModel("gemini-1.5-flash-8b")
                 
-            # Gemini gave us richer Markdown - upgrade the text
-            if extract_response.text and len(extract_response.text) > len(original_english_text) * 0.5:
-                original_english_text = extract_response.text
-                yield {"type": "status", "data": "✅ Gemini enhancement complete. Full Markdown structure preserved."}
-            else:
-                yield {"type": "status", "data": "✅ Using offline extraction (Gemini returned sparse result)."}
+                extract_response = None
+                last_exception = None
+                for attempt in range(5):
+                    try:
+                        extract_response = await extraction_model.generate_content_async(
+                            [
+                                "MISSION: HIGH-FIDELITY ACADEMIC EXTRACTION\n"
+                                "YOUR TASK: Extract the raw text from this PDF with 100% literal accuracy into Markdown format.\n\n"
+                                "CRITICAL CONSTRAINTS (VIOLATION WILL RESULT IN SYSTEM FAILURE):\n"
+                                "1. DO NOT summarize. DO NOT simplify. DO NOT invent citations. YOU MUST extract the literal text as written.\n"
+                                "2. DO NOT add sections that do not exist (e.g. if the paper is a study, do not invent a 'Methods' or 'Results' block).\n"
+                                "3. PRESERVE ALL TECHNICAL JARGON EXACTLY AS IS.\n"
+                                "4. DEDUPLICATE: If the Abstract appears twice, extract it ONLY ONCE.\n"
+                                "5. PRESERVE STRUCTURE: Use precise Markdown hierarchy (#, ##, ###).\n\n"
+                                "Return ONLY the literal extracted Markdown text.",
+                                uploaded_file,
+                            ],
+                            generation_config=genai.types.GenerationConfig(
+                                temperature=0.0,
+                                max_output_tokens=65536,
+                            ),
+                        )
+                        break
+                    except Exception as e:
+                        last_exception = e
+                        err_msg = str(e).lower()
+                        
+                        # If Google is totally dead or blocking us, don't waste time retrying.
+                        if any(err in err_msg for err in ["quota", "exceeded", "429", "invalid", "503", "400", "404", "not found"]):
+                            break
+                            
+                        wait_time = (attempt + 1) * 5
+                        logger.warning(f"Google API Error: {str(e)[:50]}... Retrying in {wait_time}s...")
+                        yield {"type": "status", "data": f"⏳ Google API Error ({str(e)[:40]})... Retrying (Attempt {attempt+2}/5)"}
+                        await asyncio.sleep(wait_time)
+                        
+                if not extract_response:
+                    raise last_exception or Exception("Gemini enhancement unavailable.")
+                    
+                # Gemini gave us richer Markdown - upgrade the text
+                if extract_response.text and len(extract_response.text) > len(original_english_text) * 0.5:
+                    original_english_text = extract_response.text
+                    yield {"type": "status", "data": "✅ Gemini enhancement complete. Full Markdown structure preserved."}
+                else:
+                    yield {"type": "status", "data": "✅ Using offline extraction (Gemini returned sparse result)."}
 
-        except Exception as gemini_err:
-            # Gemini enhancement failed - but offline extraction already succeeded, so continue!
-            err_preview = str(gemini_err)[:50]
-            yield {"type": "status", "data": f"⚠️ Gemini enhancement unavailable ({err_preview}). Using offline text..."}
-            logger.warning(f"Gemini enhancement failed (non-fatal): {gemini_err}")
+            except Exception as gemini_err:
+                # Gemini enhancement failed - but offline extraction already succeeded, so continue!
+                err_preview = str(gemini_err)[:50]
+                yield {"type": "status", "data": f"⚠️ Gemini enhancement unavailable ({err_preview}). Using offline text..."}
+                logger.warning(f"Gemini enhancement failed (non-fatal): {gemini_err}")
 
         if not original_english_text:
             yield {"type": "error", "data": "Failed to extract text from PDF."}
