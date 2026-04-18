@@ -170,22 +170,32 @@ def split_into_sections(text: str) -> List[Dict[str, str]]:
         stripped = line.strip()
         if stripped.startswith("#"):
             title = stripped.lstrip("#").strip()
-            # De-duplication check: Skip if we've already seen this title and it's something like "Abstract"
-            # or if it's an exact match of a previous title.
-            if title.lower() in seen_titles and title.lower() in ["abstract", "সারসংক্ষেপ", "introduction", "ভূমিকা"]:
+            
+            # Normalize title for robust deduplication (strip numbers like "1.", "1 ", "1.1")
+            normalized_title = title.lower()
+            import re
+            normalized_title = re.sub(r'^[\d\.\s]+', '', normalized_title).strip()
+            
+            # De-duplication check: Skip if we've already seen this normalized title
+            # and it's a generic section title that usually implies redundancy from metadata vs body.
+            generic_sections = {"abstract", "সারসংক্ষেপ", "introduction", "ভূমিকা", "conclusion", "उपसंहार", "परिचय", "सार"}
+            if normalized_title in seen_titles and normalized_title in generic_sections:
                 continue
             
-            # Save previous section
+            # Save previous section if it has meaningful content
             if current_content:
-                sections.append(
-                    {
-                        "title": current_title,
-                        "content": "\n".join(current_content).strip(),
-                    }
-                )
+                content_text = "\n".join(current_content).strip()
+                # If the section content is literally just the title again, ignore it
+                if content_text.lower() != current_title.lower() and content_text:
+                    sections.append(
+                        {
+                            "title": current_title,
+                            "content": content_text,
+                        }
+                    )
             
             current_title = title
-            seen_titles.add(title.lower())
+            seen_titles.add(normalized_title)
             current_content = []
             
             # Stop if we hit References/Bibliography (optional: keep but don't translate further?)

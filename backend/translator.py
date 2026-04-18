@@ -33,21 +33,21 @@ def _build_translation_prompt(language_name: str, glossary_prompt: str) -> str:
     return f"""You are PeerTranslate, a world-class academic research paper translator.
 
 ## YOUR TASK
-Translate the following research paper from English into **{language_name}**.
+Translate ONLY the specific English chunk provided below into **{language_name}**.
 
 ## CRITICAL RULES
-1. **Preserve the ENTIRE structure** of the paper: all headings, subheadings, bullet points, numbered lists, tables, equations, and references.
+1. **Preserve the ENTIRE structure**: all headings, subheadings, bullet points, numbered lists, tables, equations, and references.
 2. **Output in Markdown format** with proper heading hierarchy (# for title, ## for sections, ### for subsections).
 3. **DO NOT translate**: author names, affiliations, institution names, URLs, DOIs, email addresses, reference citations, mathematical equations, code, and figure/table numbers. KEEP NAMES IN ENGLISH.
 4. **DO translate**: title, abstract, all body text, section headings, figure captions, table captions, and conclusion.
 5. **Maintain academic register**: Use formal, scholarly language appropriate for the target language.
 6. **Preserve line breaks exactly**: If authors and affiliations are on multiple lines, keep them on exactly the same lines with the exact same superscripts/asterisks (e.g., `Author1*, Author2`).
 7. **Technical accuracy**: Scientific claims, numerical data, and methodological descriptions must be translated with 100% fidelity.
-8. **ZERO PARAPHRASING**: Do not add extra filler. Do not invent headings.
+8. **ZERO PARAPHRASING & ZERO SUMMARIZATION**: Do not add extra filler. Do not invent headings. Do NOT summarize the paper. If the input is just a Title and Authors, translate ONLY the Title and Authors. Do not hallucinate the abstract or introduction.
 
 {glossary_prompt}
 
-CRITICAL: Return ONLY the raw Markdown translation. No introductory tags or conversational text.
+CRITICAL: Return ONLY the raw Markdown translation of the provided text. No introductory tags or conversational text.
 """
 
 def _build_back_translation_prompt(language_name: str) -> str:
@@ -320,9 +320,9 @@ async def translate_paper(
                         "CRITICAL CONSTRAINTS:\n"
                         "1. DO NOT summarize. DO NOT simplify. Extract the literal text as written.\n"
                         "2. PRESERVE ALL TECHNICAL JARGON EXACTLY AS IS.\n"
-                        "3. DEDUPLICATE: If the Abstract appears twice, extract it ONLY ONCE.\n"
+                        "3. AGGRESSIVE DEDUPLICATION: ArXiv PDFs often have metadata (like the Abstract and Title) repeated twice (once in the metadata block, once in the paper body). Extract them ONLY ONCE. Never repeat 'Abstract' or 'Introduction'.\n"
                         "4. PRESERVE STRUCTURE: Use precise Markdown hierarchy (#, ##, ###).\n\n"
-                        "Return ONLY the literal extracted Markdown text.",
+                        "Return ONLY the literal extracted Markdown text without any wrapper tags.",
                         uploaded_file,
                     ],
                     generation_config=genai.types.GenerationConfig(
@@ -567,20 +567,16 @@ async def translate_paper(
 
     yield {"type": "status", "data": "🎉 4-Pass Pipeline complete! Final verification summary below."}
     
-    try:
-        import json
-        yield {
-            "type": "verification", 
-            "data": json.dumps({
-                "overall_score": f"{final_report.overall_score * 100:.1f}%",
-                "overall_label": final_report.overall_label,
-                "flagged_sections": final_report.flagged_sections,
-                "total_sections": len(final_report.section_scores),
-                "section_scores": [] # individual scores already sent via verification_section
-            })
+    yield {
+        "type": "verification", 
+        "data": {
+            "overall_score": round(final_report.overall_score * 100, 1),
+            "overall_label": final_report.overall_label,
+            "flagged_sections": [s.section_title for s in final_report.flagged_sections],
+            "total_sections": len(final_report.section_scores),
+            "section_scores": [] # individual scores already sent via verification_section
         }
-    except Exception as e:
-        logger.error(f"Error yielding verification json: {e}")
+    }
 
     yield {"type": "complete", "data": "Translation pipeline complete."}
 
