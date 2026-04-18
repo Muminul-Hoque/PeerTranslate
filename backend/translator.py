@@ -148,6 +148,8 @@ async def _get_llm_response(
                     ),
                     timeout=60.0
                 )
+                # Brief pause to avoid 30 RPM burst limit on Gemma models
+                await asyncio.sleep(2)
                 return response.text
             except asyncio.TimeoutError:
                 last_exception = Exception("Google API call timed out after 60s")

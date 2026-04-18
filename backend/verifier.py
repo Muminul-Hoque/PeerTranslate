@@ -26,14 +26,14 @@ class SectionScore:
     @property
     def is_confident(self) -> bool:
         """Check if the section meets the confidence threshold."""
-        return self.similarity_score >= 0.96
+        return self.similarity_score >= 0.90
 
     @property
     def confidence_label(self) -> str:
         """Human-readable confidence label."""
-        if self.similarity_score >= 0.98:
+        if self.similarity_score >= 0.96:
             return "excellent"
-        elif self.similarity_score >= 0.96:
+        elif self.similarity_score >= 0.90:
             return "good"
         elif self.similarity_score >= 0.70:
             return "needs_review"
