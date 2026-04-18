@@ -273,8 +273,8 @@ async def translate_paper(
             yield {"type": "status", "data": "✅ PDF uploaded successfully. Extracting structural text..."}
 
             # 3. Pass 0 - Extract Markdown Context (Strict Integrity Mode)
-            # Downgraded from 2.0 to 1.5-flash-8b-latest because it has a massive free tier quota (Lite model).
-            extraction_model = genai.GenerativeModel("gemini-1.5-flash-8b-latest")
+            # Switch to gemini-1.5-flash-8b (Lite) - attempting exact string to avoid 404
+            extraction_model = genai.GenerativeModel("gemini-1.5-flash-8b")
             
             extract_response = None
             last_exception = None
@@ -320,6 +320,15 @@ async def translate_paper(
         except Exception as google_err:
             # INTERCEPT ALL GOOGLE ERRORS HERE FOR THE FALLBACK
             err_msg = str(google_err)
+            
+            # Diagnostic: Print all available models if we hit a 404
+            if "404" in err_msg or "not found" in err_msg.lower():
+                try:
+                    available_models = [m.name for m in genai.list_models()]
+                    logger.error(f"DIAGNOSTIC - Available Models: {available_models}")
+                except:
+                    pass
+
             yield {"type": "warning", "data": f"⚠️ Google PDF API Failed ({err_msg[:30]}...). Stripping text offline instead (PyMuPDF)..."}
             try:
                 import fitz
