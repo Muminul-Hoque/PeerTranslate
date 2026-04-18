@@ -352,6 +352,13 @@ async function startTranslation() {
     if (judgeModel) formData.append('judge_model', judgeModel);
     if (judgeApiKey) formData.append('judge_api_key', judgeApiKey);
 
+    console.info('>>> SUBMITTING TRANSLATION:', {
+        provider: userProvider,
+        model: userModel,
+        language: languageSelect.value,
+        has_key: !!userApiKey
+    });
+
     try {
         const response = await fetch('/api/translate', {
             method: 'POST',

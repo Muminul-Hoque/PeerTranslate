@@ -204,6 +204,9 @@ async def translate_paper(
 ) -> AsyncGenerator[Dict[str, Any], None]:
     
     language_name = _get_language_name(target_language)
+    
+    # 0. Debug Trace
+    logger.info(f">>> PIPELINE START: provider={user_provider}, model={user_model}, has_api_key={bool(api_key)}")
 
     # 1. Load Glossary
     yield {"type": "status", "data": "📚 Loading academic glossary..."}
@@ -270,8 +273,8 @@ async def translate_paper(
             yield {"type": "status", "data": "✅ PDF uploaded successfully. Extracting structural text..."}
 
             # 3. Pass 0 - Extract Markdown Context (Strict Integrity Mode)
-            # Downgraded from 2.0 to 1.5-flash-latest because it has a massive free tier quota.
-            extraction_model = genai.GenerativeModel("gemini-1.5-flash-latest")
+            # Downgraded from 2.0 to 1.5-flash-8b-latest because it has a massive free tier quota (Lite model).
+            extraction_model = genai.GenerativeModel("gemini-1.5-flash-8b-latest")
             
             extract_response = None
             last_exception = None

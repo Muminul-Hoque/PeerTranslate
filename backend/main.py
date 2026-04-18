@@ -247,9 +247,11 @@ async def translate(
             detail="The downloaded file does not appear to be a valid PDF."
         )
 
+    # Trace parameters for debugging provider selection
     logger.info(
-        f"Translation request: target={filename}, "
-        f"language={language}, size={len(pdf_content)} bytes"
+        f"Incoming Request: file={filename}, lang={language}, "
+        f"provider={user_provider}, model={user_model}, judge={judge_provider}, "
+        f"has_api_key={bool(api_key)}"
     )
 
     async def event_generator():
