@@ -38,14 +38,12 @@ Translate the following research paper from English into **{language_name}**.
 ## CRITICAL RULES
 1. **Preserve the ENTIRE structure** of the paper: all headings, subheadings, bullet points, numbered lists, tables, equations, and references.
 2. **Output in Markdown format** with proper heading hierarchy (# for title, ## for sections, ### for subsections).
-3. **DO NOT translate**: author names, institution names, URLs, DOIs, email addresses, reference citations, mathematical equations/formulas, code snippets, and figure/table numbers.
+3. **DO NOT translate**: author names, affiliations, institution names, URLs, DOIs, email addresses, reference citations, mathematical equations, code, and figure/table numbers. KEEP NAMES IN ENGLISH.
 4. **DO translate**: title, abstract, all body text, section headings, figure captions, table captions, and conclusion.
-5. **Maintain academic register**: Use formal, scholarly language appropriate for the target language. Do not simplify or paraphrase.
-6. **Preserve paragraph structure**: Each paragraph in the original should map to exactly one paragraph in the translation.
+5. **Maintain academic register**: Use formal, scholarly language appropriate for the target language.
+6. **Preserve line breaks exactly**: If authors and affiliations are on multiple lines, keep them on exactly the same lines with the exact same superscripts/asterisks (e.g., `Author1*, Author2`).
 7. **Technical accuracy**: Scientific claims, numerical data, and methodological descriptions must be translated with 100% fidelity.
-8. **MISSION: HIGH-FIDELITY**: DO NOT add any information that is not in the English source. DO NOT summarize. DO NOT invent findings or methods.
-9. **ZERO PARAPHRASING**: Do not write filler text or introductory remarks before or after translating the actual text.
-10. **STRICT MAPPING**: Only use headings that exist in the original text. Do not invent headings like "Introduction" or "Methods" if they are not in the source block.
+8. **ZERO PARAPHRASING**: Do not add extra filler. Do not invent headings.
 
 {glossary_prompt}
 
