@@ -250,8 +250,8 @@ async def translate_paper(
         yield {"type": "complete", "data": "Translation retrieved from community cache."}
         return
 
-    # 2. Upload PDF for Extraction (Google Only)
-    yield {"type": "status", "data": "📄 Uploading PDF to Gemini for Native Extraction..."}
+    # 2. Save PDF to temp file & extract figures
+    yield {"type": "status", "data": "📄 Processing PDF document..."}
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
         tmp_file.write(pdf_content)
         tmp_path = tmp_file.name
@@ -261,295 +261,290 @@ async def translate_paper(
     if extracted_figures:
         yield {"type": "status", "data": f"✅ Found {len(extracted_figures)} high-res figures."}
 
+    # ═══════════════════════════════════════════════════════════════
+    # STEP 1: OFFLINE EXTRACTION (PyMuPDF) — Always runs, zero quota
+    # ═══════════════════════════════════════════════════════════════
+    yield {"type": "status", "data": "📥 Extracting text with offline engine (PyMuPDF)..."}
+    original_english_text = ""
     try:
-        # STEP 1: Always extract text offline with PyMuPDF first (zero quota, zero cost)
-        yield {"type": "status", "data": "📥 Extracting text structure with offline engine (PyMuPDF)..."}
         import fitz
         doc = fitz.open(tmp_path)
-        original_english_text = ""
         for page in doc:
             original_english_text += page.get_text("text") + "\n\n"
+        doc.close()
+    except Exception as fitz_err:
+        logger.error(f"PyMuPDF extraction failed: {fitz_err}")
 
-        # STEP 2: Optionally enhance with Google Gemini for superior structure (only if server key is available)
-        extraction_api_key = api_key if (user_provider == "google" and api_key) else settings.gemini_api_key
-        if extraction_api_key:
-            try:
-                yield {"type": "status", "data": "✨ Enhancing with Gemini Multimodal for superior structure..."}
+    if original_english_text.strip():
+        yield {"type": "status", "data": "✅ Offline text extraction complete."}
+    else:
+        yield {"type": "error", "data": "❌ Could not extract any text from the PDF."}
+        return
+
+    # ═══════════════════════════════════════════════════════════════
+    # STEP 2: GEMINI ENHANCEMENT (Optional) — 30s timeout, non-fatal
+    # ═══════════════════════════════════════════════════════════════
+    extraction_api_key = api_key if (user_provider == "google" and api_key) else settings.gemini_api_key
+    if extraction_api_key:
+        try:
+            yield {"type": "status", "data": "✨ Attempting Gemini enhancement for better structure..."}
+            
+            async def _gemini_enhance():
                 genai.configure(api_key=extraction_api_key)
                 uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
-
-                # Pass 0 - Extract Markdown Context (Strict Integrity Mode)
                 extraction_model = genai.GenerativeModel("gemini-1.5-flash-8b")
+                response = await extraction_model.generate_content_async(
+                    [
+                        "MISSION: HIGH-FIDELITY ACADEMIC EXTRACTION\n"
+                        "YOUR TASK: Extract the raw text from this PDF with 100% literal accuracy into Markdown format.\n\n"
+                        "CRITICAL CONSTRAINTS:\n"
+                        "1. DO NOT summarize. DO NOT simplify. Extract the literal text as written.\n"
+                        "2. PRESERVE ALL TECHNICAL JARGON EXACTLY AS IS.\n"
+                        "3. DEDUPLICATE: If the Abstract appears twice, extract it ONLY ONCE.\n"
+                        "4. PRESERVE STRUCTURE: Use precise Markdown hierarchy (#, ##, ###).\n\n"
+                        "Return ONLY the literal extracted Markdown text.",
+                        uploaded_file,
+                    ],
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0.0,
+                        max_output_tokens=65536,
+                    ),
+                )
+                return response
+
+            # 30-second hard timeout — if Gemini hangs, we move on
+            response = await asyncio.wait_for(_gemini_enhance(), timeout=30.0)
+            
+            if response and response.text and len(response.text) > len(original_english_text) * 0.5:
+                original_english_text = response.text
+                yield {"type": "status", "data": "✅ Gemini enhancement applied. Full Markdown structure preserved."}
+            else:
+                yield {"type": "status", "data": "✅ Using offline extraction (Gemini result was sparse)."}
                 
-                extract_response = None
-                last_exception = None
-                for attempt in range(5):
-                    try:
-                        extract_response = await extraction_model.generate_content_async(
-                            [
-                                "MISSION: HIGH-FIDELITY ACADEMIC EXTRACTION\n"
-                                "YOUR TASK: Extract the raw text from this PDF with 100% literal accuracy into Markdown format.\n\n"
-                                "CRITICAL CONSTRAINTS (VIOLATION WILL RESULT IN SYSTEM FAILURE):\n"
-                                "1. DO NOT summarize. DO NOT simplify. DO NOT invent citations. YOU MUST extract the literal text as written.\n"
-                                "2. DO NOT add sections that do not exist (e.g. if the paper is a study, do not invent a 'Methods' or 'Results' block).\n"
-                                "3. PRESERVE ALL TECHNICAL JARGON EXACTLY AS IS.\n"
-                                "4. DEDUPLICATE: If the Abstract appears twice, extract it ONLY ONCE.\n"
-                                "5. PRESERVE STRUCTURE: Use precise Markdown hierarchy (#, ##, ###).\n\n"
-                                "Return ONLY the literal extracted Markdown text.",
-                                uploaded_file,
-                            ],
-                            generation_config=genai.types.GenerationConfig(
-                                temperature=0.0,
-                                max_output_tokens=65536,
-                            ),
-                        )
-                        break
-                    except Exception as e:
-                        last_exception = e
-                        err_msg = str(e).lower()
-                        
-                        # If Google is totally dead or blocking us, don't waste time retrying.
-                        if any(err in err_msg for err in ["quota", "exceeded", "429", "invalid", "503", "400", "404", "not found"]):
-                            break
-                            
-                        wait_time = (attempt + 1) * 5
-                        logger.warning(f"Google API Error: {str(e)[:50]}... Retrying in {wait_time}s...")
-                        yield {"type": "status", "data": f"⏳ Google API Error ({str(e)[:40]})... Retrying (Attempt {attempt+2}/5)"}
-                        await asyncio.sleep(wait_time)
-                        
-                if not extract_response:
-                    raise last_exception or Exception("Gemini enhancement unavailable.")
-                    
-                # Gemini gave us richer Markdown - upgrade the text
-                if extract_response.text and len(extract_response.text) > len(original_english_text) * 0.5:
-                    original_english_text = extract_response.text
-                    yield {"type": "status", "data": "✅ Gemini enhancement complete. Full Markdown structure preserved."}
-                else:
-                    yield {"type": "status", "data": "✅ Using offline extraction (Gemini returned sparse result)."}
+        except asyncio.TimeoutError:
+            yield {"type": "status", "data": "⚠️ Gemini timed out after 30s. Using offline text (still accurate)."}
+            logger.warning("Gemini enhancement timed out after 30s")
+        except Exception as gemini_err:
+            err_preview = str(gemini_err)[:60]
+            yield {"type": "status", "data": f"⚠️ Gemini unavailable ({err_preview}). Using offline text..."}
+            logger.warning(f"Gemini enhancement failed (non-fatal): {gemini_err}")
+    else:
+        yield {"type": "status", "data": "ℹ️ No Google API key configured. Using offline extraction."}
 
-            except Exception as gemini_err:
-                # Gemini enhancement failed - but offline extraction already succeeded, so continue!
-                err_preview = str(gemini_err)[:50]
-                yield {"type": "status", "data": f"⚠️ Gemini enhancement unavailable ({err_preview}). Using offline text..."}
-                logger.warning(f"Gemini enhancement failed (non-fatal): {gemini_err}")
+    # ═══════════════════════════════════════════════════════════════
+    # STEP 3: TRANSLATION PIPELINE
+    # ═══════════════════════════════════════════════════════════════
+    yield {"type": "status", "data": "✅ Extracted original English Markdown."}
 
-        if not original_english_text:
-            yield {"type": "error", "data": "Failed to extract text from PDF."}
-            return
+    # 4. Start Real-Time 4-Pass Pipeline (Iterative Section-by-Section)
+    effective_label = user_provider.upper() if user_provider else "GOOGLE"
+    yield {"type": "status", "data": f"🚀 Starting Real-Time 4-Pass Pipeline via {effective_label}..."}
+    
+    translation_prompt = _build_translation_prompt(language_name, glossary_prompt)
+    back_translation_prompt = _build_back_translation_prompt(language_name)
+    
+    sections = split_into_sections(original_english_text)
+    full_translated_markdown = ""
+    section_scores = []
+    
+    for i, section in enumerate(sections):
+        section_title = section["title"]
+        section_index_txt = f"{i+1}/{len(sections)}"
+        
+        # --- Pass 1: Translate ---
+        yield {"type": "status", "data": f"⏳ [{section_index_txt}] Translating: {section_title}..."}
+        section_content = f"## {section_title}\n\n{section['content']}"
+        
+        try:
+            translated_chunk = await _get_llm_response(
+                translation_prompt, section_content, user_provider, api_key, user_model, settings
+            )
             
-        yield {"type": "status", "data": "✅ Extracted original English Markdown."}
+            if not translated_chunk:
+                raise Exception("Model returned empty translation.")
 
-        # 4. Start Real-Time 4-Pass Pipeline (Iterative Section-by-Section)
-        effective_label = user_provider.upper() if user_provider else "GOOGLE"
-        yield {"type": "status", "data": f"🚀 Starting Real-Time 4-Pass Pipeline via {effective_label}..."}
-        
-        translation_prompt = _build_translation_prompt(language_name, glossary_prompt)
-        back_translation_prompt = _build_back_translation_prompt(language_name)
-        
-        sections = split_into_sections(original_english_text)
-        full_translated_markdown = ""
-        section_scores = []
-        
-        for i, section in enumerate(sections):
-            section_title = section["title"]
-            section_index_txt = f"{i+1}/{len(sections)}"
-            
-            # --- Pass 1: Translate ---
-            yield {"type": "status", "data": f"⏳ [{section_index_txt}] Translating: {section_title}..."}
-            section_content = f"## {section_title}\n\n{section['content']}"
-            
-            try:
-                translated_chunk = await _get_llm_response(
-                    translation_prompt, section_content, user_provider, api_key, user_model, settings
+            # --- Pass 2 & 3: Verification with Recursive Loop (Pass 4) ---
+            max_attempts = 2
+            best_similarity = 0.0
+            best_chunk = translated_chunk
+            final_score_obj = None
+
+            for attempt in range(1, max_attempts + 1):
+                # --- Pass 2: Back-Translate ---
+                yield {"type": "status", "data": f"🔄 [{section_index_txt}] Verifying (Attempt {attempt})..."}
+                back_chunk = await _get_llm_response(
+                    back_translation_prompt, translated_chunk, user_provider, api_key, user_model, settings
                 )
                 
-                if not translated_chunk:
-                    raise Exception("Model returned empty translation.")
-
-                # --- Pass 2 & 3: Verification with Recursive Loop (Pass 4) ---
-                max_attempts = 2
-                best_similarity = 0.0
-                best_chunk = translated_chunk
-                final_score_obj = None
-
-                for attempt in range(1, max_attempts + 1):
-                    # --- Pass 2: Back-Translate ---
-                    yield {"type": "status", "data": f"🔄 [{section_index_txt}] Verifying (Attempt {attempt})..."}
-                    back_chunk = await _get_llm_response(
-                        back_translation_prompt, translated_chunk, user_provider, api_key, user_model, settings
+                # --- Pass 3: Score Section (AI Judge Mode) ---
+                yield {"type": "status", "data": f"⚖️ [{section_index_txt}] AI Judge ({judge_provider}) is evaluating meaning... (Attempt {attempt})"}
+                
+                judge_prompt = _build_judge_prompt(section_content, back_chunk or "")
+                similarity = 0.0
+                
+                try:
+                    # Level 1: Use user-selected Judge
+                    actual_judge_key = judge_api_key if judge_api_key else (api_key if judge_provider == user_provider else None)
+                    
+                    score_str = await _get_llm_response(
+                        "You are a strict technical evaluator.", 
+                        judge_prompt, 
+                        judge_provider, 
+                        actual_judge_key, 
+                        judge_model, 
+                        settings, 
+                        temperature=0.0
                     )
-                    
-                    # --- Pass 3: Score Section (AI Judge Mode) ---
-                    yield {"type": "status", "data": f"⚖️ [{section_index_txt}] AI Judge ({judge_provider}) is evaluating meaning... (Attempt {attempt})"}
-                    
-                    judge_prompt = _build_judge_prompt(section_content, back_chunk or "")
-                    similarity = 0.0
+                    import re
+                    match = re.search(r'(\d+)', score_str)
+                    similarity = float(match.group(1)) / 100.0 if match else 0.0
+                except Exception as e1:
+                    logger.warning(f"Level 1 Judge failed ({judge_provider}): {e1}")
+                    yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Custom Judge failed. Recovering with Server-Side Gemini..."}
                     
                     try:
-                        # Level 1: Use user-selected Judge
-                        actual_judge_key = judge_api_key if judge_api_key else (api_key if judge_provider == user_provider else None)
-                        
+                        # Level 2: Use Server-Side Google Gemini fallback
                         score_str = await _get_llm_response(
                             "You are a strict technical evaluator.", 
                             judge_prompt, 
-                            judge_provider, 
-                            actual_judge_key, 
-                            judge_model, 
+                            "google", 
+                            None, 
+                            None, 
                             settings, 
                             temperature=0.0
                         )
                         import re
                         match = re.search(r'(\d+)', score_str)
                         similarity = float(match.group(1)) / 100.0 if match else 0.0
-                    except Exception as e1:
-                        logger.warning(f"Level 1 Judge failed ({judge_provider}): {e1}")
-                        yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Custom Judge failed. Recovering with Server-Side Gemini..."}
-                        
-                        try:
-                            # Level 2: Use Server-Side Google Gemini fallback
-                            score_str = await _get_llm_response(
-                                "You are a strict technical evaluator.", 
-                                judge_prompt, 
-                                "google", 
-                                None, 
-                                None, 
-                                settings, 
-                                temperature=0.0
-                            )
-                            import re
-                            match = re.search(r'(\d+)', score_str)
-                            similarity = float(match.group(1)) / 100.0 if match else 0.0
-                        except Exception as e2:
-                            logger.error(f"Level 2 Judge failed (Google): {e2}")
-                            yield {"type": "status", "data": f"⚠️ [{section_index_txt}] AI Verification unreachable. Using literal math baseline..."}
-                            # Level 3: Final Resort - Literal Matching
-                            similarity = compute_similarity(section_content, back_chunk or "")
-                    
-                    flagged = check_terminology(translated_chunk, glossary_terms)
-                    
-                    score_obj = SectionScore(
-                        section_title=section_title,
-                        original_text=section["content"][:100],
-                        back_translated_text=(back_chunk or "")[:100],
-                        similarity_score=similarity,
-                        flagged_terms=flagged
-                    )
+                    except Exception as e2:
+                        logger.error(f"Level 2 Judge failed (Google): {e2}")
+                        yield {"type": "status", "data": f"⚠️ [{section_index_txt}] AI Verification unreachable. Using literal math baseline..."}
+                        # Level 3: Final Resort - Literal Matching
+                        similarity = compute_similarity(section_content, back_chunk or "")
+                
+                flagged = check_terminology(translated_chunk, glossary_terms)
+                
+                score_obj = SectionScore(
+                    section_title=section_title,
+                    original_text=section["content"][:100],
+                    back_translated_text=(back_chunk or "")[:100],
+                    similarity_score=similarity,
+                    flagged_terms=flagged
+                )
 
-                    # Update best result if this is better or first
-                    if similarity > best_similarity or final_score_obj is None:
-                        best_similarity = similarity
-                        best_chunk = translated_chunk
-                        final_score_obj = score_obj
+                # Update best result if this is better or first
+                if similarity > best_similarity or final_score_obj is None:
+                    best_similarity = similarity
+                    best_chunk = translated_chunk
+                    final_score_obj = score_obj
 
-                    # If confident or last attempt, we're done with this section
-                    if score_obj.is_confident or attempt == max_attempts:
-                        if not score_obj.is_confident:
-                             yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Final accuracy: {round(similarity*100)}%. Proceeding..."}
-                        else:
-                             yield {"type": "status", "data": f"✅ [{section_index_txt}] Verified: {round(similarity*100)}%."}
-                        break
-                    
-                    # --- Pass 4: Ultra-Precision Refinement (Triggered if low confidence) ---
-                    yield {"type": "status", "data": f"🛠️ [{section_index_txt}] Accuracy too low ({round(similarity*100)}%). Error Correction Mode active..."}
-                    
-                    retranslate_sys = _build_refinement_prompt(language_name, glossary_prompt, translated_chunk)
-                    
-                    refined_chunk = await _get_llm_response(
-                        retranslate_sys, section_content, user_provider, api_key, user_model, settings, temperature=0.2
-                    )
-                    
-                    if refined_chunk:
-                        translated_chunk = refined_chunk
+                # If confident or last attempt, we're done with this section
+                if score_obj.is_confident or attempt == max_attempts:
+                    if not score_obj.is_confident:
+                         yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Final accuracy: {round(similarity*100)}%. Proceeding..."}
                     else:
-                        break # Cannot refine if model gives empty response
+                         yield {"type": "status", "data": f"✅ [{section_index_txt}] Verified: {round(similarity*100)}%."}
+                    break
+                
+                # --- Pass 4: Ultra-Precision Refinement (Triggered if low confidence) ---
+                yield {"type": "status", "data": f"🛠️ [{section_index_txt}] Accuracy too low ({round(similarity*100)}%). Error Correction Mode active..."}
+                
+                retranslate_sys = _build_refinement_prompt(language_name, glossary_prompt, translated_chunk)
+                
+                refined_chunk = await _get_llm_response(
+                    retranslate_sys, section_content, user_provider, api_key, user_model, settings, temperature=0.2
+                )
+                
+                if refined_chunk:
+                    translated_chunk = refined_chunk
+                else:
+                    break # Cannot refine if model gives empty response
 
-                # Commit the best result
-                full_translated_markdown += best_chunk + "\n\n"
-                section_scores.append(final_score_obj)
-                
-                # Update UI with final text
-                yield {"type": "translation", "data": full_translated_markdown}
-                
-                # Update UI with final accuracy card
-                yield {
-                    "type": "verification_section",
-                    "data": {
-                        "title": section_title,
-                        "score": round(final_score_obj.similarity_score * 100, 1),
-                        "label": final_score_obj.confidence_label,
-                        "flagged_terms": final_score_obj.flagged_terms,
-                        "metrics": {
-                            "current_index": i + 1,
-                            "total_sections": len(sections),
-                            "running_avg": round((sum(s.similarity_score for s in section_scores) / len(section_scores)) * 100, 1)
-                        }
+            # Commit the best result
+            full_translated_markdown += best_chunk + "\n\n"
+            section_scores.append(final_score_obj)
+            
+            # Update UI with final text
+            yield {"type": "translation", "data": full_translated_markdown}
+            
+            # Update UI with final accuracy card
+            yield {
+                "type": "verification_section",
+                "data": {
+                    "title": section_title,
+                    "score": round(final_score_obj.similarity_score * 100, 1),
+                    "label": final_score_obj.confidence_label,
+                    "flagged_terms": final_score_obj.flagged_terms,
+                    "metrics": {
+                        "current_index": i + 1,
+                        "total_sections": len(sections),
+                        "running_avg": round((sum(s.similarity_score for s in section_scores) / len(section_scores)) * 100, 1)
                     }
                 }
-
-            except Exception as e:
-                logger.error(f"Error in section {section_title}: {e}")
-                err_str = str(e).lower()
-                
-                # If the API key is exhausted, abort the whole pipeline rather than failing every section
-                if any(k in err_str for k in ["quota", "429", "rate_limit", "ratelimit", "exceeded"]):
-                    yield {"type": "error", "data": (
-                        f"❌ API Quota Exhausted while translating '{section_title}'. "
-                        f"Your '{user_provider.upper()}' key has hit its rate limit. "
-                        "Please switch to a different provider in Advanced Settings, use a fresh API key, or wait until tomorrow."
-                    )}
-                    return  # Stop the entire pipeline, no need to fail every remaining section
-                
-                # Otherwise, it's a transient error — skip and continue
-                error_msg = f"Translation failed for section: {section_title}. Skipping..."
-                yield {"type": "warning", "data": error_msg}
-                full_translated_markdown += f"\n\n> [!WARNING] {error_msg}\n\n"
-                yield {"type": "translation", "data": full_translated_markdown}
-
-        # Build final report and save to cache
-        final_report = VerificationReport(section_scores=section_scores)
-        
-        # Inject figures before saving and returning
-        full_translated_markdown = reinsert_figures(full_translated_markdown, extracted_figures)
-        yield {"type": "translation", "data": full_translated_markdown}
-        
-        save_translation(
-            pdf_bytes=pdf_content,
-            language=target_language,
-            translated_markdown=full_translated_markdown,
-            verification_score=final_report.overall_score,
-            model_used=user_model or "default",
-            glossary_version="1.0.0" # Could be dynamic if needed
-        )
-
-        yield {"type": "status", "data": "🎉 4-Pass Pipeline complete! Final verification summary below."}
-        
-        try:
-            import json
-            yield {
-                "type": "verification", 
-                "data": json.dumps({
-                    "overall_score": f"{final_report.overall_score * 100:.1f}%",
-                    "overall_label": final_report.overall_label,
-                    "flagged_sections": final_report.flagged_sections,
-                    "total_sections": len(final_report.section_scores),
-                    "section_scores": [] # individual scores already sent via verification_section
-                })
             }
+
         except Exception as e:
-            logger.error(f"Error yielding verification json: {e}")
-
-        yield {"type": "complete", "data": "Translation pipeline complete."}
-
-
-    finally:
-        # Cleanup
-        try:
-            if 'uploaded_file' in locals():
-                genai.delete_file(uploaded_file.name)
-        except Exception as e:
-            logger.error(f"Failed to delete file from Google APIs: {e}")
+            logger.error(f"Error in section {section_title}: {e}")
+            err_str = str(e).lower()
             
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
+            # If the API key is exhausted, abort the whole pipeline rather than failing every section
+            if any(k in err_str for k in ["quota", "429", "rate_limit", "ratelimit", "exceeded"]):
+                yield {"type": "error", "data": (
+                    f"❌ API Quota Exhausted while translating '{section_title}'. "
+                    f"Your '{user_provider.upper()}' key has hit its rate limit. "
+                    "Please switch to a different provider in Advanced Settings, use a fresh API key, or wait until tomorrow."
+                )}
+                return  # Stop the entire pipeline, no need to fail every remaining section
+            
+            # Otherwise, it's a transient error — skip and continue
+            error_msg = f"Translation failed for section: {section_title}. Skipping..."
+            yield {"type": "warning", "data": error_msg}
+            full_translated_markdown += f"\n\n> [!WARNING] {error_msg}\n\n"
+            yield {"type": "translation", "data": full_translated_markdown}
+
+    # Build final report and save to cache
+    final_report = VerificationReport(section_scores=section_scores)
+    
+    # Inject figures before saving and returning
+    full_translated_markdown = reinsert_figures(full_translated_markdown, extracted_figures)
+    yield {"type": "translation", "data": full_translated_markdown}
+    
+    save_translation(
+        pdf_bytes=pdf_content,
+        language=target_language,
+        translated_markdown=full_translated_markdown,
+        verification_score=final_report.overall_score,
+        model_used=user_model or "default",
+        glossary_version="1.0.0" # Could be dynamic if needed
+    )
+
+    yield {"type": "status", "data": "🎉 4-Pass Pipeline complete! Final verification summary below."}
+    
+    try:
+        import json
+        yield {
+            "type": "verification", 
+            "data": json.dumps({
+                "overall_score": f"{final_report.overall_score * 100:.1f}%",
+                "overall_label": final_report.overall_label,
+                "flagged_sections": final_report.flagged_sections,
+                "total_sections": len(final_report.section_scores),
+                "section_scores": [] # individual scores already sent via verification_section
+            })
+        }
+    except Exception as e:
+        logger.error(f"Error yielding verification json: {e}")
+
+    yield {"type": "complete", "data": "Translation pipeline complete."}
+
+    # Cleanup temp files
+    try:
+        if 'uploaded_file' in locals():
+            genai.delete_file(uploaded_file.name)
+    except Exception as e:
+        logger.error(f"Failed to delete file from Google APIs: {e}")
+        
+    try:
+        os.remove(tmp_path)
+    except OSError:
+        pass
