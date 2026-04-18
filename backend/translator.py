@@ -156,9 +156,17 @@ async def _get_llm_response(
             except Exception as e:
                 last_exception = e
                 err_msg = str(e).lower()
-                # Fast-exit on hard errors — don't waste time retrying
-                if any(k in err_msg for k in ["404", "not found", "quota", "exceeded", "invalid"]):
+                
+                # If we hit an RPM (Requests Per Minute) rate limit / 429 error, pause gracefully and retry
+                if any(k in err_msg for k in ["429", "quota", "exceeded", "rate limit", "ratelimit"]) and attempt < max_retries - 1:
+                    logger.warning(f"Hit Google API quota/rate limit. Pausing 15s to reset RPM... (Attempt {attempt+1}/{max_retries})")
+                    await asyncio.sleep(15.0)
+                    continue
+                    
+                # Fast-exit on terminal hard errors (like 404 Model Not Found or invalid keys)
+                if any(k in err_msg for k in ["404", "not found", "invalid"]):
                     raise e
+                    
                 wait_time = (attempt + 1) * 3  # Wait 3s, 6s, 9s (was 10s, 20s, 30s)
                 logger.warning(f"Google API Error. Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
                 await asyncio.sleep(wait_time)
