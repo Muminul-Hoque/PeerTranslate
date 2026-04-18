@@ -137,18 +137,30 @@ async def _get_llm_response(
         last_exception = None
         for attempt in range(max_retries):
             try:
-                response = await model.generate_content_async(
-                    [full_prompt],
-                    generation_config=genai.types.GenerationConfig(
-                        temperature=temperature,
-                        max_output_tokens=65536,
+                # 60-second hard timeout per API call — prevents infinite hangs
+                response = await asyncio.wait_for(
+                    model.generate_content_async(
+                        [full_prompt],
+                        generation_config=genai.types.GenerationConfig(
+                            temperature=temperature,
+                            max_output_tokens=65536,
+                        ),
                     ),
+                    timeout=60.0
                 )
                 return response.text
+            except asyncio.TimeoutError:
+                last_exception = Exception("Google API call timed out after 60s")
+                logger.warning(f"Google API timed out. Attempt {attempt+1}/{max_retries}")
+                await asyncio.sleep(3)
             except Exception as e:
                 last_exception = e
-                wait_time = (attempt + 1) * 10  # Wait 10s, 20s...
-                logger.warning(f"Google API Error (429/503). Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                err_msg = str(e).lower()
+                # Fast-exit on hard errors — don't waste time retrying
+                if any(k in err_msg for k in ["404", "not found", "quota", "exceeded", "invalid"]):
+                    raise e
+                wait_time = (attempt + 1) * 3  # Wait 3s, 6s, 9s (was 10s, 20s, 30s)
+                logger.warning(f"Google API Error. Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
                 await asyncio.sleep(wait_time)
                 
         raise last_exception or Exception(f"Failed after {max_retries} attempts.")
