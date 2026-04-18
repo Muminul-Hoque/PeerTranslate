@@ -58,12 +58,22 @@ async function loadLanguages() {
             defaultLang = navigator.language.split('-')[0];
         }
 
-        // If the browser language isn't supported, fallback to the first language in the API response (usually Arabic or Bengali alphabetically)
         const supportedCodes = data.languages.map(l => l.code);
-        if (!supportedCodes.includes(defaultLang)) {
-            defaultLang = data.languages.length > 0 ? data.languages[0].code : 'es';
+        if (defaultLang && !supportedCodes.includes(defaultLang)) {
+            defaultLang = null;
         }
 
+        // 1. Add Default Placeholder
+        const placeholder = document.createElement('option');
+        placeholder.value = "";
+        placeholder.textContent = "Select Target Language...";
+        placeholder.disabled = true;
+        if (!defaultLang) {
+            placeholder.selected = true;
+        }
+        languageSelect.appendChild(placeholder);
+
+        // 2. Add API Languages
         data.languages.forEach((lang) => {
             const option = document.createElement('option');
             option.value = lang.code;
@@ -71,15 +81,16 @@ async function loadLanguages() {
             if (lang.has_glossary) {
                 option.textContent += ' ✦';
             }
-            if (lang.code === defaultLang) {
+            if (defaultLang && lang.code === defaultLang) {
                 option.selected = true;
             }
             languageSelect.appendChild(option);
         });
 
-        // Save selection when they change it
+        // Save selection when they change it and revalidate form
         languageSelect.addEventListener('change', (e) => {
             localStorage.setItem('peertranslate_lang', e.target.value);
+            validateSubmitButton();
         });
 
     } catch (error) {
@@ -270,6 +281,7 @@ function setupEventListeners() {
 function validateSubmitButton() {
     const activeTab = document.querySelector('.input-tab.active').getAttribute('data-tab');
     const tosChecked = document.getElementById('tos-checkbox')?.checked ?? false;
+    const hasLanguage = languageSelect.value && languageSelect.value !== "";
 
     let hasInput = false;
     if (activeTab === 'file') {
@@ -278,7 +290,7 @@ function validateSubmitButton() {
         hasInput = urlInput.value.trim().length > 0;
     }
 
-    translateBtn.disabled = !(hasInput && tosChecked);
+    translateBtn.disabled = !(hasInput && tosChecked && hasLanguage);
 }
 
 // ── Translation Pipeline ──
