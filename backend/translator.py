@@ -303,8 +303,8 @@ async def translate_paper(
                     last_exception = e
                     err_msg = str(e).lower()
                     
-                    # If Google is totally dead or blocking us, don't waste 75 seconds retrying.
-                    if any(err in err_msg for err in ["quota", "exceeded", "429", "invalid", "503", "400"]):
+                    # If Google is totally dead or blocking us, don't waste time retrying.
+                    if any(err in err_msg for err in ["quota", "exceeded", "429", "invalid", "503", "400", "404", "not found"]):
                         break
                         
                     wait_time = (attempt + 1) * 5
@@ -349,7 +349,8 @@ async def translate_paper(
         yield {"type": "status", "data": "✅ Extracted original English Markdown."}
 
         # 4. Start Real-Time 4-Pass Pipeline (Iterative Section-by-Section)
-        yield {"type": "status", "data": f"🚀 Starting Real-Time 4-Pass Pipeline via {user_provider.upper()}..."}
+        effective_label = user_provider.upper() if user_provider else "GOOGLE"
+        yield {"type": "status", "data": f"🚀 Starting Real-Time 4-Pass Pipeline via {effective_label}..."}
         
         translation_prompt = _build_translation_prompt(language_name, glossary_prompt)
         back_translation_prompt = _build_back_translation_prompt(language_name)
@@ -496,9 +497,21 @@ async def translate_paper(
 
             except Exception as e:
                 logger.error(f"Error in section {section_title}: {e}")
-                error_msg = f"Translation/Verification failed for section: {section_title}"
+                err_str = str(e).lower()
+                
+                # If the API key is exhausted, abort the whole pipeline rather than failing every section
+                if any(k in err_str for k in ["quota", "429", "rate_limit", "ratelimit", "exceeded"]):
+                    yield {"type": "error", "data": (
+                        f"❌ API Quota Exhausted while translating '{section_title}'. "
+                        f"Your '{user_provider.upper()}' key has hit its rate limit. "
+                        "Please switch to a different provider in Advanced Settings, use a fresh API key, or wait until tomorrow."
+                    )}
+                    return  # Stop the entire pipeline, no need to fail every remaining section
+                
+                # Otherwise, it's a transient error — skip and continue
+                error_msg = f"Translation failed for section: {section_title}. Skipping..."
                 yield {"type": "warning", "data": error_msg}
-                full_translated_markdown += f"\n\n> [!ERROR] {error_msg}\n\n"
+                full_translated_markdown += f"\n\n> [!WARNING] {error_msg}\n\n"
                 yield {"type": "translation", "data": full_translated_markdown}
 
         # Build final report and save to cache
