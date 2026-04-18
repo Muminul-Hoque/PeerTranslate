@@ -73,6 +73,7 @@ class TermContribution(BaseModel):
     language: str
     domain: str
     contributor_name: str
+    affiliation: Optional[str] = None
     terms: dict
 
 
@@ -85,14 +86,15 @@ async def submit_contribution(data: TermContribution):
         
         cursor.execute(
             """
-            INSERT INTO community_contributions (language, domain, terms_json, contributor_name)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO community_contributions (language, domain, terms_json, contributor_name, contributor_affiliation)
+            VALUES (?, ?, ?, ?, ?)
             """,
             (
                 data.language,
                 data.domain,
                 json.dumps(data.terms, ensure_ascii=False),
-                data.contributor_name
+                data.contributor_name,
+                data.affiliation
             )
         )
         conn.commit()

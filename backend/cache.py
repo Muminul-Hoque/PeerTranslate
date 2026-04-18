@@ -84,6 +84,12 @@ def _get_db():
         cursor.execute("ALTER TABLE translations ADD COLUMN paper_domain TEXT DEFAULT 'general'")
     except:
         pass
+        
+    # Migration for contributor_affiliation
+    try:
+        cursor.execute("ALTER TABLE community_contributions ADD COLUMN contributor_affiliation TEXT")
+    except:
+        pass
 
     conn.commit()
     return conn
