@@ -364,7 +364,7 @@ async def translate_paper(
                 raise Exception("Model returned empty translation.")
 
             # --- Pass 2 & 3: Verification with Recursive Loop (Pass 4) ---
-            max_attempts = 2
+            max_attempts = 5
             best_similarity = 0.0
             best_chunk = translated_chunk
             final_score_obj = None
