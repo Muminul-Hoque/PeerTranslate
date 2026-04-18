@@ -50,27 +50,12 @@ async function loadLanguages() {
         const response = await fetch('/api/languages');
         const data = await response.json();
 
-        languageSelect.innerHTML = '';
-        
-        // Try to get user's last selection or their browser's native language
-        let defaultLang = localStorage.getItem('peertranslate_lang');
-        if (!defaultLang && navigator.language) {
-            defaultLang = navigator.language.split('-')[0];
-        }
-
-        const supportedCodes = data.languages.map(l => l.code);
-        if (defaultLang && !supportedCodes.includes(defaultLang)) {
-            defaultLang = null;
-        }
-
         // 1. Add Default Placeholder
         const placeholder = document.createElement('option');
         placeholder.value = "";
         placeholder.textContent = "Select Target Language...";
         placeholder.disabled = true;
-        if (!defaultLang) {
-            placeholder.selected = true;
-        }
+        placeholder.selected = true;
         languageSelect.appendChild(placeholder);
 
         // 2. Add API Languages
@@ -81,15 +66,11 @@ async function loadLanguages() {
             if (lang.has_glossary) {
                 option.textContent += ' ✦';
             }
-            if (defaultLang && lang.code === defaultLang) {
-                option.selected = true;
-            }
             languageSelect.appendChild(option);
         });
 
-        // Save selection when they change it and revalidate form
+        // Revalidate form when user finally picks an option
         languageSelect.addEventListener('change', (e) => {
-            localStorage.setItem('peertranslate_lang', e.target.value);
             validateSubmitButton();
         });
 
