@@ -299,11 +299,14 @@ async def translate_paper(
                 except Exception as e:
                     last_exception = e
                     err_msg = str(e).lower()
-                    if "quota" in err_msg and "exceeded" in err_msg:
+                    
+                    # If Google is totally dead or blocking us, don't waste 75 seconds retrying.
+                    if any(err in err_msg for err in ["quota", "exceeded", "429", "invalid", "503", "400"]):
                         break
+                        
                     wait_time = (attempt + 1) * 5
-                    logger.warning(f"Google API Error passing Pass 0: {str(e)}. Retrying in {wait_time}s...")
-                    yield {"type": "status", "data": f"⏳ Extraction taking longer than usual... Retrying (Attempt {attempt+2}/5)"}
+                    logger.warning(f"Google API Error: {str(e)[:50]}... Retrying in {wait_time}s...")
+                    yield {"type": "status", "data": f"⏳ Google API Error ({str(e)[:40]})... Retrying (Attempt {attempt+2}/5)"}
                     await asyncio.sleep(wait_time)
                     
             if not extract_response:
