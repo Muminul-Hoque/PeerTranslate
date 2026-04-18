@@ -261,50 +261,59 @@ async def translate_paper(
     try:
         # Check if user provided their own Google key. If so, use it to bypass server quota limits.
         extraction_api_key = api_key if (user_provider == "google" and api_key) else settings.gemini_api_key
-        genai.configure(api_key=extraction_api_key)
-        uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
-        yield {"type": "status", "data": "✅ PDF uploaded successfully. Extracting structural text..."}
-
-        # 3. Pass 0 - Extract Markdown Context (Strict Integrity Mode)
-        extraction_model = genai.GenerativeModel("gemini-2.0-flash-lite-001") 
         
-        extract_response = None
-        last_exception = None
-        for attempt in range(5):
-            try:
-                extract_response = await extraction_model.generate_content_async(
-                    [
-                        "MISSION: HIGH-FIDELITY ACADEMIC EXTRACTION\n"
-                        "YOUR TASK: Extract the raw text from this PDF with 100% literal accuracy into Markdown format.\n\n"
-                        "CRITICAL CONSTRAINTS (VIOLATION WILL RESULT IN SYSTEM FAILURE):\n"
-                        "1. DO NOT summarize. DO NOT simplify. DO NOT invent citations. YOU MUST extract the literal text as written.\n"
-                        "2. DO NOT add sections that do not exist (e.g. if the paper is a study, do not invent a 'Methods' or 'Results' block).\n"
-                        "3. PRESERVE ALL TECHNICAL JARGON EXACTLY AS IS.\n"
-                        "4. DEDUPLICATE: If the Abstract appears twice, extract it ONLY ONCE.\n"
-                        "5. PRESERVE STRUCTURE: Use precise Markdown hierarchy (#, ##, ###).\n\n"
-                        "Return ONLY the literal extracted Markdown text.",
-                        uploaded_file,
-                    ],
-                    generation_config=genai.types.GenerationConfig(
-                        temperature=0.0,
-                        max_output_tokens=65536,
-                    ),
-                )
-                break
-            except Exception as e:
-                last_exception = e
-                err_msg = str(e).lower()
-                if "quota" in err_msg and "exceeded" in err_msg:
-                    # Daily or strict API quota limit hit immediately, not just a burst.
+        # We wrap the upload and extraction in a try-except specifically to catch Google Quota/Key errors
+        # and trigger the offline PyMuPDF fallback if they fail.
+        try:
+            genai.configure(api_key=extraction_api_key)
+            uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
+            yield {"type": "status", "data": "✅ PDF uploaded successfully. Extracting structural text..."}
+
+            # 3. Pass 0 - Extract Markdown Context (Strict Integrity Mode)
+            extraction_model = genai.GenerativeModel("gemini-2.0-flash-lite-001") 
+            
+            extract_response = None
+            last_exception = None
+            for attempt in range(5):
+                try:
+                    extract_response = await extraction_model.generate_content_async(
+                        [
+                            "MISSION: HIGH-FIDELITY ACADEMIC EXTRACTION\n"
+                            "YOUR TASK: Extract the raw text from this PDF with 100% literal accuracy into Markdown format.\n\n"
+                            "CRITICAL CONSTRAINTS (VIOLATION WILL RESULT IN SYSTEM FAILURE):\n"
+                            "1. DO NOT summarize. DO NOT simplify. DO NOT invent citations. YOU MUST extract the literal text as written.\n"
+                            "2. DO NOT add sections that do not exist (e.g. if the paper is a study, do not invent a 'Methods' or 'Results' block).\n"
+                            "3. PRESERVE ALL TECHNICAL JARGON EXACTLY AS IS.\n"
+                            "4. DEDUPLICATE: If the Abstract appears twice, extract it ONLY ONCE.\n"
+                            "5. PRESERVE STRUCTURE: Use precise Markdown hierarchy (#, ##, ###).\n\n"
+                            "Return ONLY the literal extracted Markdown text.",
+                            uploaded_file,
+                        ],
+                        generation_config=genai.types.GenerationConfig(
+                            temperature=0.0,
+                            max_output_tokens=65536,
+                        ),
+                    )
                     break
-                wait_time = (attempt + 1) * 10
-                logger.warning(f"Google API Error passing Pass 0. Retrying in {wait_time}s...")
-                await asyncio.sleep(wait_time)
+                except Exception as e:
+                    last_exception = e
+                    err_msg = str(e).lower()
+                    if "quota" in err_msg and "exceeded" in err_msg:
+                        break
+                    wait_time = (attempt + 1) * 10
+                    logger.warning(f"Google API Error passing Pass 0. Retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                    
+            if not extract_response:
+                raise last_exception or Exception("Failed to extract text from PDF after 5 attempts.")
                 
-        if not extract_response:
-            err_msg = str(last_exception).lower()
-            if "quota" in err_msg or "exceeded" in err_msg or "invalid" in err_msg:
-                yield {"type": "warning", "data": "⚠️ Google API Quota Exhausted! Falling back to offline fallback extractor (PyMuPDF)..."}
+            original_english_text = extract_response.text
+
+        except Exception as google_err:
+            # INTERCEPT ALL GOOGLE EXHAUSTION/KEY ERRORS HERE FOR THE FALLBACK
+            err_msg = str(google_err).lower()
+            if "quota" in err_msg or "exceeded" in err_msg or "invalid" in err_msg or "400" in err_msg:
+                yield {"type": "warning", "data": "⚠️ Google API Quota Exhausted! Falling back to offline local extractor (PyMuPDF)..."}
                 import fitz
                 doc = fitz.open(tmp_path)
                 original_english_text = ""
@@ -314,9 +323,7 @@ async def translate_paper(
                 if not original_english_text.strip():
                     raise Exception("Offline fallback could not read any text from the PDF.")
             else:
-                raise last_exception or Exception("Failed to extract text from PDF after 5 attempts.")
-        else:
-            original_english_text = extract_response.text
+                raise google_err
 
         if not original_english_text:
             yield {"type": "error", "data": "Failed to extract text from PDF."}
