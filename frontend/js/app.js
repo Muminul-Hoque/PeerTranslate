@@ -51,6 +51,19 @@ async function loadLanguages() {
         const data = await response.json();
 
         languageSelect.innerHTML = '';
+        
+        // Try to get user's last selection or their browser's native language
+        let defaultLang = localStorage.getItem('peertranslate_lang');
+        if (!defaultLang && navigator.language) {
+            defaultLang = navigator.language.split('-')[0];
+        }
+
+        // If the browser language isn't supported, fallback to Bengali
+        const supportedCodes = data.languages.map(l => l.code);
+        if (!supportedCodes.includes(defaultLang)) {
+            defaultLang = 'bn';
+        }
+
         data.languages.forEach((lang) => {
             const option = document.createElement('option');
             option.value = lang.code;
@@ -58,11 +71,17 @@ async function loadLanguages() {
             if (lang.has_glossary) {
                 option.textContent += ' ✦';
             }
-            if (lang.code === 'bn') {
+            if (lang.code === defaultLang) {
                 option.selected = true;
             }
             languageSelect.appendChild(option);
         });
+
+        // Save selection when they change it
+        languageSelect.addEventListener('change', (e) => {
+            localStorage.setItem('peertranslate_lang', e.target.value);
+        });
+
     } catch (error) {
         console.error('Failed to load languages:', error);
         // Fallback: add Bengali as default
