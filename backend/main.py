@@ -9,6 +9,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 from pydantic import BaseModel
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -165,7 +166,7 @@ async def get_glossary(lang_code: str, domain: str):
     )
 
 
-from typing import Optional
+
 import httpx
 
 @app.post("/api/translate")
