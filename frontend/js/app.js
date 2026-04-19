@@ -489,22 +489,17 @@ async function startTranslation() {
         });
 
         if (!response.ok) {
-            let errorData;
+            const text = await response.text();
+            let errorMsg = `Server returned ${response.status}`;
             try {
-                errorData = await response.json();
-            } catch (e) {
-                const text = await response.text();
-                throw new Error(`Server returned ${response.status}: ${text}`);
-            }
-            
-            let errorMsg = 'Translation request failed.';
-            if (errorData && errorData.detail) {
-                if (typeof errorData.detail === 'string') {
-                    errorMsg = errorData.detail;
-                } else {
-                    // FastAPI validation errors are arrays of objects
-                    errorMsg = JSON.stringify(errorData.detail);
+                const errorData = JSON.parse(text);
+                if (errorData && errorData.detail) {
+                    errorMsg = typeof errorData.detail === 'string' 
+                        ? errorData.detail 
+                        : JSON.stringify(errorData.detail);
                 }
+            } catch (e) {
+                errorMsg += `: ${text}`;
             }
             throw new Error(errorMsg);
         }
