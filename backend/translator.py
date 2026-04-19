@@ -291,21 +291,31 @@ async def translate_paper(
     
     # ═══════════════════════════════════════════════════════════════
     # STEP 1: FAST NATIVE MARKDOWN EXTRACTION (PyMuPDF4LLM)
+    #   Falls back to basic PyMuPDF if pymupdf4llm crashes (OOM on
+    #   Render's 512 MB free tier due to onnxruntime / layout engine)
     # ═══════════════════════════════════════════════════════════════
-    yield {"type": "status", "data": "📥 Extracting structural Markdown natively (PyMuPDF4LLM)..."}
+    yield {"type": "status", "data": "📥 Extracting structural Markdown (PyMuPDF4LLM)..."}
     original_english_text = ""
     try:
         import pymupdf4llm
-        # We use a memory-efficient mode that doesn't trigger heavy AI vision models
         original_english_text = pymupdf4llm.to_markdown(tmp_path, show_progress=False)
+        yield {"type": "status", "data": "✅ Native Markdown extraction complete."}
     except Exception as extract_err:
-        logger.error(f"PyMuPDF4LLM extraction failed: {extract_err}")
+        logger.warning(f"PyMuPDF4LLM failed ({extract_err}). Falling back to basic PyMuPDF...")
+        yield {"type": "status", "data": "⚠️ Advanced extractor unavailable. Using basic PyMuPDF fallback..."}
+        try:
+            import fitz
+            doc = fitz.open(tmp_path)
+            for page in doc:
+                original_english_text += page.get_text("text") + "\n\n"
+            doc.close()
+            yield {"type": "status", "data": "✅ Basic text extraction complete."}
+        except Exception as fitz_err:
+            logger.error(f"Basic PyMuPDF extraction also failed: {fitz_err}")
 
     if not original_english_text.strip():
         yield {"type": "error", "data": "❌ Could not extract any text from the PDF."}
         return
-
-    yield {"type": "status", "data": "✅ Instant Markdown extraction complete."}
 
     # ═══════════════════════════════════════════════════════════════
     # STEP 2: FIGURE EXTRACTION (Non-blocking heuristic)
@@ -313,12 +323,10 @@ async def translate_paper(
     extracted_figures = {}
     if not quick_mode:
         try:
-            yield {"type": "status", "data": "🖼️ Heuristically identifying figures and diagrams..."}
-            from backend.figure_extractor import extract_images_from_pdf, reinsert_figures
-            # Only extract figures if we have enough memory headroom (implicit safeguard)
+            yield {"type": "status", "data": "🖼️ Extracting figures and diagrams..."}
             extracted_figures = extract_images_from_pdf(pdf_content)
             if extracted_figures:
-                yield {"type": "status", "data": f"✅ Identified {len(extracted_figures)} potential figures."}
+                yield {"type": "status", "data": f"✅ Found {len(extracted_figures)} figures."}
         except Exception as fig_err:
             logger.warning(f"Figure extraction failed (skipping): {fig_err}")
 
@@ -541,8 +549,9 @@ async def translate_paper(
     # Build final report and save to cache
     final_report = VerificationReport(section_scores=section_scores)
     
-    # Inject figures before saving and returning
-    full_translated_markdown = reinsert_figures(full_translated_markdown, extracted_figures)
+    # Inject figures before saving and returning (skip if no figures extracted)
+    if extracted_figures:
+        full_translated_markdown = reinsert_figures(full_translated_markdown, extracted_figures)
     yield {"type": "translation", "data": full_translated_markdown}
     
     save_translation(
