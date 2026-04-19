@@ -559,11 +559,14 @@ async def translate_paper(
             
             # If the API key is exhausted, abort the whole pipeline rather than failing every section
             if any(k in err_str for k in ["quota", "429", "rate_limit", "ratelimit", "exceeded"]):
-                yield {"type": "error", "data": (
+                error_body = (
                     f"❌ API Quota Exhausted while translating '{section_title}'. "
                     f"Your '{user_provider.upper()}' key has hit its rate limit. "
-                    "Please switch to a different provider in Advanced Settings, use a fresh API key, or wait until tomorrow."
-                )}
+                    "Please switch to a different provider in Advanced Settings, use a fresh API key, or wait for your quota to reset."
+                )
+                yield {"type": "error", "data": error_body}
+                full_translated_markdown += f"\n\n> [!ERROR] {error_body}\n\n"
+                yield {"type": "translation", "data": full_translated_markdown}
                 return  # Stop the entire pipeline, no need to fail every remaining section
             
             # Otherwise, it's a transient error — skip and continue
