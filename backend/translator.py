@@ -343,12 +343,16 @@ async def translate_paper(
                         md_lines.append("")
                         continue
                     
-                    # Classify by relative font size
+                    # Classify by relative font size or clear regex pattern (e.g., '1 Introduction', 'Abstract')
+                    import re
+                    is_numbered_heading = bool(re.match(r'^(\d+(\.\d+)*)\s+[A-Z][A-Za-z\s]+$', clean)) and len(clean) < 100
+                    is_all_caps_heading = clean.isupper() and len(clean) > 3 and len(clean) < 50
+                    
                     if line_size >= body_size * 1.6:
                         md_lines.append(f"# {clean}")
-                    elif line_size >= body_size * 1.3 or (is_bold and line_size >= body_size * 1.1):
+                    elif line_size >= body_size * 1.3 or (is_bold and line_size >= body_size * 1.1) or is_numbered_heading:
                         md_lines.append(f"## {clean}")
-                    elif is_bold and line_size >= body_size * 0.95 and len(clean) < 80:
+                    elif (is_bold and line_size >= body_size * 0.95 and len(clean) < 80) or is_all_caps_heading:
                         md_lines.append(f"### {clean}")
                     else:
                         md_lines.append(clean)

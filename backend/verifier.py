@@ -213,47 +213,50 @@ def split_into_sections(text: str) -> List[Dict[str, str]]:
         )
 
     # ---------------------------------------------------------
-    # FALLBACK CHUNKER for Raw PyMuPDF Text without Markdown
+    # SAFETY CHUNKER
     # ---------------------------------------------------------
-    # If the offline extractor clumped a massive 10,000 word paper into just 1 or 2 sections,
-    # the LLM will completely hang. We must forcefully chunk it into smaller pieces.
-    if len(sections) < 3 and len(text) > 4000:
-        logger.info("Raw text detected with insufficient markdown headers. Firing heuristic chunker.")
-        synthetic_sections = []
-        paragraphs = text.split("\n\n")
-        
-        current_chunk = []
-        current_length = 0
-        chunk_index = 1
-        
-        for p in paragraphs:
-            stripped_p = p.strip()
-            if not stripped_p:
-                continue
-                
-            current_chunk.append(stripped_p)
-            current_length += len(stripped_p)
+    # Prevent massive LLM payloads by splitting any section > 5000 chars.
+    safe_sections = []
+    MAX_CHARS = 5000
+    
+    for sec in sections:
+        content_len = len(sec["content"])
+        if content_len <= MAX_CHARS:
+            safe_sections.append(sec)
+        else:
+            logger.info(f"Section '{sec['title']}' is too large ({content_len} chars). Splitting into chunks.")
+            paragraphs = sec["content"].split("\n\n")
+            current_chunk = []
+            current_length = 0
+            part_index = 1
             
-            # ~3000 characters per chunk ensures fast API responses and prevents timeouts
-            if current_length > 3000:
-                synthetic_sections.append({
-                    "title": f"Part {chunk_index}",
+            for p in paragraphs:
+                stripped_p = p.strip()
+                if not stripped_p:
+                    continue
+                
+                # If adding this paragraph pushes us over the limit, flush the current chunk
+                if current_length + len(stripped_p) > MAX_CHARS and current_chunk:
+                    safe_sections.append({
+                        "title": f"{sec['title']} (Part {part_index})",
+                        "content": "\n\n".join(current_chunk)
+                    })
+                    part_index += 1
+                    current_chunk = []
+                    current_length = 0
+                
+                current_chunk.append(stripped_p)
+                current_length += len(stripped_p)
+                
+            # Append remaining chunk
+            if current_chunk:
+                title_suffix = f" (Part {part_index})" if part_index > 1 else ""
+                safe_sections.append({
+                    "title": f"{sec['title']}{title_suffix}",
                     "content": "\n\n".join(current_chunk)
                 })
-                chunk_index += 1
-                current_chunk = []
-                current_length = 0
-                
-        # Append whatever is left
-        if current_chunk:
-            synthetic_sections.append({
-                "title": f"Part {chunk_index}",
-                "content": "\n\n".join(current_chunk)
-            })
-            
-        return synthetic_sections
 
-    return sections
+    return safe_sections
 
 
 def build_verification_report(
