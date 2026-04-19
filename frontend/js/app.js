@@ -224,9 +224,12 @@ function setupEventListeners() {
     // Hamburger Menu
     const hamburger = document.getElementById('nav-hamburger');
     const navLinks = document.getElementById('nav-links');
+    const navbar = document.querySelector('.navbar');
+    
     if (hamburger && navLinks) {
         hamburger.addEventListener('click', () => {
             navLinks.classList.toggle('mobile-open');
+            if(navbar) navbar.classList.toggle('mobile-open');
         });
         
         // Close menu when clicking a link
@@ -234,6 +237,7 @@ function setupEventListeners() {
         links.forEach(link => {
             link.addEventListener('click', () => {
                 navLinks.classList.remove('mobile-open');
+                if(navbar) navbar.classList.remove('mobile-open');
             });
         });
     }

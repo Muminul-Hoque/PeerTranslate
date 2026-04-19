@@ -1107,20 +1107,30 @@ body::before {
         display: block;
     }
 
+    /* We give navbar a mobile-open state to disable its backdrop-filter, 
+       so .nav-links can use position: fixed relative to the true viewport. */
+    .navbar.mobile-open {
+        backdrop-filter: none;
+        background: rgba(10, 14, 26, 1);
+    }
+
     .nav-links {
         display: none;
         position: fixed;
-        top: 0;
+        top: 65px; /* just below the standard navbar height */
         left: 0;
         right: 0;
-        bottom: 0;
-        background: rgba(10, 14, 26, 0.97);
+        height: calc(100vh - 65px);
+        background: rgba(10, 14, 26, 0.98);
         backdrop-filter: blur(24px);
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
+        padding-top: var(--space-2xl);
         gap: var(--space-xl);
         z-index: 105;
+        border-top: 1px solid var(--border-glass);
+        overflow-y: auto;
     }
 
     .nav-links.mobile-open {
