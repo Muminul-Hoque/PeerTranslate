@@ -8,11 +8,13 @@ handles PDF uploads, and streams translations via SSE.
 import json
 import logging
 import os
+import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,6 +35,22 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# ── Rate Limiter (in-memory, per-IP) ──
+# Max 10 glossary contributions per IP per hour
+RATE_LIMIT_WINDOW = 3600  # seconds (1 hour)
+RATE_LIMIT_MAX = 10
+_rate_limiter: dict[str, list[float]] = defaultdict(list)
+
+def _check_rate_limit(ip: str) -> bool:
+    """Return True if the IP is within the rate limit, False if exceeded."""
+    now = time.time()
+    # Prune old timestamps
+    _rate_limiter[ip] = [t for t in _rate_limiter[ip] if now - t < RATE_LIMIT_WINDOW]
+    if len(_rate_limiter[ip]) >= RATE_LIMIT_MAX:
+        return False
+    _rate_limiter[ip].append(now)
+    return True
 
 # ──────────────────────────────────────────────
 # FastAPI Application
@@ -79,13 +97,40 @@ class TermContribution(BaseModel):
 
 
 @app.post("/api/contribute")
-async def submit_contribution(data: TermContribution):
+async def submit_contribution(data: TermContribution, request: Request):
     """Save an inline glossary contribution to the pending database."""
+    
+    # ── Rate Limiting ──
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Maximum 10 contributions per hour."
+        )
+    
+    # ── Input Sanitization ──
+    if not data.terms or len(data.terms) == 0:
+        raise HTTPException(status_code=400, detail="You must provide at least one term.")
+    if len(data.terms) > 200:
+        raise HTTPException(status_code=400, detail="Maximum 200 terms per submission.")
+    
+    MAX_TERM_LEN = 200
+    sanitized_terms = {}
+    for eng, translated in data.terms.items():
+        eng_clean = str(eng).strip()[:MAX_TERM_LEN]
+        tgt_clean = str(translated).strip()[:MAX_TERM_LEN]
+        if eng_clean and tgt_clean:
+            sanitized_terms[eng_clean] = tgt_clean
+    
+    if not sanitized_terms:
+        raise HTTPException(status_code=400, detail="All terms were empty after sanitization.")
+    
     try:
         conn = _get_db()
         cursor = conn.cursor()
         
-        name_to_save = data.contributor_name.strip() if data.contributor_name else "Anonymous"
+        name_to_save = data.contributor_name.strip()[:100] if data.contributor_name else "Anonymous"
+        affiliation_to_save = data.affiliation.strip()[:200] if data.affiliation else None
         
         cursor.execute(
             """
@@ -93,14 +138,15 @@ async def submit_contribution(data: TermContribution):
             VALUES (?, ?, ?, ?, ?)
             """,
             (
-                data.language,
-                data.domain,
-                json.dumps(data.terms, ensure_ascii=False),
+                data.language[:10],
+                data.domain[:50],
+                json.dumps(sanitized_terms, ensure_ascii=False),
                 name_to_save,
-                data.affiliation
+                affiliation_to_save
             )
         )
         conn.commit()
+        logger.info(f"✅ Contribution saved: {len(sanitized_terms)} terms in {data.language} from {client_ip}")
         return {"status": "success", "message": "Contribution saved to queue."}
     except Exception as e:
         logger.error(f"Failed to save contribution: {e}")
