@@ -290,75 +290,21 @@ async def translate_paper(
         yield {"type": "status", "data": f"✅ Found {len(extracted_figures)} high-res figures."}
 
     # ═══════════════════════════════════════════════════════════════
-    # STEP 1: OFFLINE EXTRACTION (PyMuPDF) — Always runs, zero quota
+    # STEP 1: FAST NATIVE MARKDOWN EXTRACTION (PyMuPDF4LLM)
     # ═══════════════════════════════════════════════════════════════
-    yield {"type": "status", "data": "📥 Extracting text with offline engine (PyMuPDF)..."}
+    yield {"type": "status", "data": "📥 Extracting structural Markdown natively (PyMuPDF4LLM)..."}
     original_english_text = ""
     try:
-        import fitz
-        doc = fitz.open(tmp_path)
-        for page in doc:
-            original_english_text += page.get_text("text") + "\n\n"
-        doc.close()
-    except Exception as fitz_err:
-        logger.error(f"PyMuPDF extraction failed: {fitz_err}")
+        import pymupdf4llm
+        original_english_text = pymupdf4llm.to_markdown(tmp_path)
+    except Exception as extract_err:
+        logger.error(f"PyMuPDF4LLM extraction failed: {extract_err}")
 
     if original_english_text.strip():
-        yield {"type": "status", "data": "✅ Offline text extraction complete."}
+        yield {"type": "status", "data": "✅ Instant Markdown extraction complete."}
     else:
         yield {"type": "error", "data": "❌ Could not extract any text from the PDF."}
         return
-
-    # ═══════════════════════════════════════════════════════════════
-    # STEP 2: GEMINI ENHANCEMENT (Optional) — 30s timeout, non-fatal
-    # ═══════════════════════════════════════════════════════════════
-    extraction_api_key = api_key if (user_provider == "google" and api_key) else settings.gemini_api_key
-    if extraction_api_key:
-        try:
-            yield {"type": "status", "data": "✨ Attempting Gemini enhancement for better structure..."}
-            
-            async def _gemini_enhance():
-                genai.configure(api_key=extraction_api_key)
-                uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
-                extraction_model = genai.GenerativeModel("gemini-flash-lite-latest")
-                response = await extraction_model.generate_content_async(
-                    [
-                        "MISSION: HIGH-FIDELITY ACADEMIC EXTRACTION\n"
-                        "YOUR TASK: Extract the raw text from this PDF with 100% literal accuracy into Markdown format.\n\n"
-                        "CRITICAL CONSTRAINTS:\n"
-                        "1. DO NOT summarize. DO NOT simplify. Extract the literal text as written.\n"
-                        "2. PRESERVE ALL TECHNICAL JARGON EXACTLY AS IS.\n"
-                        "3. AGGRESSIVE DEDUPLICATION: ArXiv PDFs often have metadata (like the Abstract and Title) repeated twice (once in the metadata block, once in the paper body). Extract them ONLY ONCE. Never repeat 'Abstract' or 'Introduction'.\n"
-                        "4. PRESERVE STRUCTURE: Use precise Markdown hierarchy (#, ##, ###).\n\n"
-                        "Return ONLY the literal extracted Markdown text without any wrapper tags.",
-                        uploaded_file,
-                    ],
-                    generation_config=genai.types.GenerationConfig(
-                        temperature=0.0,
-                        max_output_tokens=65536,
-                    ),
-                )
-                return response
-
-            # 90-second hard timeout — PDF extraction needs more time
-            response = await asyncio.wait_for(_gemini_enhance(), timeout=90.0)
-            
-            if response and response.text and len(response.text) > len(original_english_text) * 0.5:
-                original_english_text = response.text
-                yield {"type": "status", "data": "✅ Gemini enhancement applied. Full Markdown structure preserved."}
-            else:
-                yield {"type": "status", "data": "✅ Using offline extraction (Gemini result was sparse)."}
-                
-        except asyncio.TimeoutError:
-            yield {"type": "status", "data": "⚠️ Gemini timed out after 90s. Using offline text (still accurate)."}
-            logger.warning("Gemini enhancement timed out after 90s")
-        except Exception as gemini_err:
-            err_preview = str(gemini_err)[:60]
-            yield {"type": "status", "data": f"⚠️ Gemini unavailable ({err_preview}). Using offline text..."}
-            logger.warning(f"Gemini enhancement failed (non-fatal): {gemini_err}")
-    else:
-        yield {"type": "status", "data": "ℹ️ No Google API key configured. Using offline extraction."}
-
     # ═══════════════════════════════════════════════════════════════
     # STEP 3: TRANSLATION PIPELINE
     # ═══════════════════════════════════════════════════════════════
