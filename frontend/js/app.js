@@ -279,15 +279,8 @@ function setupEventListeners() {
                 sidebysideContainer.style.display = 'block';
                 outputBody.style.display = 'none';
                 sidebysideBtn.textContent = '📄 Single View';
-                // populate side panels
-                const sideTrans = document.getElementById('output-body-sidebyside');
-                const sideOrig = document.getElementById('original-body');
-                if (sideTrans && rawMarkdown) sideTrans.innerHTML = outputBody.innerHTML;
-                if (sideOrig && originalMarkdown) {
-                    sideOrig.innerHTML = typeof marked !== 'undefined' ? marked.parse(originalMarkdown) : `<pre>${originalMarkdown}</pre>`;
-                } else if (sideOrig) {
-                    sideOrig.innerHTML = '<p style="color:#999;text-align:center;margin-top:2rem;">Original English not available for this paper.</p>';
-                }
+                // populate side panels from in-memory content
+                populateSideBySide();
             } else {
                 sidebysideContainer.style.display = 'none';
                 outputBody.style.display = 'block';
@@ -431,9 +424,19 @@ async function startTranslation() {
     if (progressBarFill) progressBarFill.style.width = '3%';
     if (progressLabel) progressLabel.textContent = 'Starting pipeline...';
 
-    // Show results section
+    // 1. Reset state
+    rawMarkdown = '';
+    originalMarkdown = '';
+    totalSections = 0;
+    completedSections = 0;
+    sideBySideActive = false;
+    if (sidebysideBtn) sidebysideBtn.textContent = '📖 Side-by-Side';
+    if (sidebysideContainer) sidebysideContainer.style.display = 'none';
+
+    // 2. Prepare UI
     resultsSection.classList.add('visible');
     statusLog.innerHTML = '';
+    outputBody.style.display = 'block'; // Ensure single view is default
     outputBody.innerHTML = `
         <div id="translation-loading-state" style="padding:3rem 2rem;text-align:center;color:var(--text-muted);">
             <div style="font-size:2rem;margin-bottom:1rem;animation:spin 2s linear infinite;display:inline-block;">⚙️</div>
@@ -608,10 +611,20 @@ function handleSSEEvent(type, rawData) {
 
         case 'original_english':
             originalMarkdown = data;
+            if (sideBySideActive) populateSideBySide();
+            break;
+
+        case 'original_english_chunk':
+            originalMarkdown += data;
+            if (sideBySideActive) populateSideBySide();
             break;
 
         case 'translation':
             renderTranslation(data);
+            break;
+
+        case 'translation_chunk':
+            renderTranslation(rawMarkdown + data);
             break;
 
         case 'verification':
@@ -655,6 +668,22 @@ function addStatusEntry(text) {
 }
 
 // ── Render Translation ──
+function populateSideBySide() {
+    const sideTrans = document.getElementById('output-body-sidebyside');
+    const sideOrig = document.getElementById('original-body');
+    if (sideTrans && rawMarkdown) {
+        sideTrans.innerHTML = typeof marked !== 'undefined' ? marked.parse(rawMarkdown) : basicMarkdownRender(rawMarkdown);
+    } else if (sideTrans) {
+        sideTrans.innerHTML = '<p style="color:var(--text-muted);text-align:center;margin-top:2rem;">Translation will appear here...</p>';
+    }
+    
+    if (sideOrig && originalMarkdown) {
+        sideOrig.innerHTML = typeof marked !== 'undefined' ? marked.parse(originalMarkdown) : basicMarkdownRender(originalMarkdown);
+    } else if (sideOrig) {
+        sideOrig.innerHTML = '<p style="color:var(--text-muted);text-align:center;margin-top:2rem;">Original English is not available for this paper (extracted in chunks directly from PDF).</p>';
+    }
+}
+
 function renderTranslation(markdownText) {
     // Remove the loading skeleton on first real content
     const loadingState = document.getElementById('translation-loading-state');
@@ -666,6 +695,11 @@ function renderTranslation(markdownText) {
         outputBody.innerHTML = marked.parse(markdownText);
     } else {
         outputBody.innerHTML = basicMarkdownRender(markdownText);
+    }
+    
+    // Live update the side-by-side view if it is active
+    if (typeof sideBySideActive !== 'undefined' && sideBySideActive) {
+        populateSideBySide();
     }
 }
 

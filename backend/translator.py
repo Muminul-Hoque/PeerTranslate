@@ -380,10 +380,17 @@ async def translate_paper(
     # ═══════════════════════════════════════════════════════════════
     # STEP 3: TRANSLATION PIPELINE
     # ═══════════════════════════════════════════════════════════════
-    yield {"type": "status", "data": "✅ Extracted original English Markdown."}
+    yield {"type": "status", "data": "✅ Extracted original English sections."}
     
-    # Send original English to frontend for side-by-side view
-    yield {"type": "original_english", "data": original_english_text}
+    sections = split_into_sections(original_english_text)
+    
+    # Send original English chunks to frontend for side-by-side view
+    # Chunking avoids SSE payload limits and browser lag for large papers
+    for section in sections:
+        yield {
+            "type": "original_english_chunk", 
+            "data": f"# {section['title']}\n\n{section['content']}\n\n"
+        }
 
     # 4. Start Real-Time 4-Pass Pipeline (Iterative Section-by-Section)
     effective_label = user_provider.upper() if user_provider else "GOOGLE"
@@ -391,8 +398,6 @@ async def translate_paper(
     
     translation_prompt = _build_translation_prompt(language_name, glossary_prompt)
     back_translation_prompt = _build_back_translation_prompt(language_name)
-    
-    sections = split_into_sections(original_english_text)
     
     # Quick Mode: only translate Abstract, Introduction, Conclusion, Summary
     if quick_mode:
@@ -549,8 +554,8 @@ async def translate_paper(
             full_translated_markdown += best_chunk + "\n\n"
             section_scores.append(final_score_obj)
             
-            # Update UI with final text
-            yield {"type": "translation", "data": full_translated_markdown}
+            # Update UI with the final chunk for this section
+            yield {"type": "translation_chunk", "data": best_chunk + "\n\n"}
             
             # Update UI with final accuracy card
             yield {
@@ -581,14 +586,14 @@ async def translate_paper(
                 )
                 yield {"type": "error", "data": error_body}
                 full_translated_markdown += f"\n\n> [!ERROR] {error_body}\n\n"
-                yield {"type": "translation", "data": full_translated_markdown}
+                yield {"type": "translation_chunk", "data": f"\n\n> [!ERROR] {error_body}\n\n"}
                 return  # Stop the entire pipeline, no need to fail every remaining section
             
             # Otherwise, it's a transient error — skip and continue
             error_msg = f"Translation failed for section: {section_title}. Skipping..."
             yield {"type": "warning", "data": error_msg}
             full_translated_markdown += f"\n\n> [!WARNING] {error_msg}\n\n"
-            yield {"type": "translation", "data": full_translated_markdown}
+            yield {"type": "translation_chunk", "data": f"\n\n> [!WARNING] {error_msg}\n\n"}
 
     # Build final report and save to cache
     final_report = VerificationReport(section_scores=section_scores)
