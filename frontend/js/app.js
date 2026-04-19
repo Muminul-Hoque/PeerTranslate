@@ -516,6 +516,8 @@ async function startTranslation() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let eventType = 'message';
+        let eventData = '';
 
         while (true) {
             const { done, value } = await reader.read();
@@ -527,9 +529,6 @@ async function startTranslation() {
             const lines = buffer.split('\n');
             buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
-            let eventType = '';
-            let eventData = '';
-
             for (const rawLine of lines) {
                 const line = rawLine.replace(/\r/g, '');
                 if (line.startsWith('event:')) {
@@ -537,9 +536,9 @@ async function startTranslation() {
                 } else if (line.startsWith('data:')) {
                     const dataLine = line.slice(5).trim();
                     eventData = eventData ? eventData + '\n' + dataLine : dataLine;
-                } else if (line.trim() === '' && eventType && eventData !== '') {
+                } else if (line.trim() === '' && eventData !== '') {
                     handleSSEEvent(eventType, eventData);
-                    eventType = '';
+                    eventType = 'message'; // Reset to standard default
                     eventData = '';
                 }
             }
