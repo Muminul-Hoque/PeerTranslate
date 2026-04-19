@@ -12,7 +12,7 @@
 If you discover a security vulnerability in PeerTranslate, please report it responsibly:
 
 1. **DO NOT** open a public GitHub Issue for security vulnerabilities
-2. Email: **muminul.hoque@example.com** (replace with your actual email)
+2. Email: **muminul951@gmail.com** 
 3. Include:
    - Description of the vulnerability
    - Steps to reproduce
