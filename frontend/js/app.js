@@ -650,8 +650,17 @@ function addStatusEntry(text) {
 }
 
 // ── Render Translation ──
+// Sentinel used to detect and skip the initial loading placeholder
+const LOADING_SENTINEL = '⏳';
 function renderTranslation(markdownText) {
-    rawMarkdown = markdownText; // store in module-level variable
+    // If this is just the loading placeholder, show it softly
+    // but don't overwrite a real translation that's already displayed
+    const isLoadingPlaceholder = markdownText.includes(LOADING_SENTINEL) &&
+        markdownText.includes('Translation in Progress');
+    if (isLoadingPlaceholder && rawMarkdown && rawMarkdown.length > 200) {
+        return; // already have real content
+    }
+    rawMarkdown = markdownText;
     outputBody.dataset.rawMarkdown = markdownText;
     if (typeof marked !== 'undefined') {
         outputBody.innerHTML = marked.parse(markdownText);
@@ -684,19 +693,22 @@ function basicMarkdownRender(text) {
 function renderVerification(report) {
     verificationPanel.classList.add('visible');
 
-    // Overall score badge
+    // Update overall score badge with final numbers
     overallScoreBadge.textContent = `${report.overall_score}% — ${formatLabel(report.overall_label)}`;
     overallScoreBadge.className = `score-badge ${report.overall_label}`;
 
-    // Section cards
-    verificationGrid.innerHTML = '';
-
+    // Only rebuild section cards if the backend provided them.
+    // If section_scores is empty, individual cards were already rendered
+    // incrementally via verification_section events — DO NOT wipe the grid.
     if (report.sections && report.sections.length > 0) {
+        verificationGrid.innerHTML = '';
         report.sections.forEach((section) => {
             appendVerificationCard(section);
         });
-    } else {
-        verificationGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem;">No sections to verify.</div>';
+    }
+    // If grid is still empty (edge case), show a mild indicator
+    if (verificationGrid.children.length === 0) {
+        verificationGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem;">Sections verified in real-time above.</div>';
     }
 }
 
