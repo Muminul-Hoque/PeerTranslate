@@ -47,14 +47,58 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDOIDetection();
 });
 
-// ── DOI Auto Detection ──
+// ── DOI Auto Detection + Unpaywall Resolution ──
 function setupDOIDetection() {
     if (!urlInput) return;
+    
+    // Status element below URL input
+    let doiStatus = document.getElementById('doi-status');
+    if (!doiStatus) {
+        doiStatus = document.createElement('div');
+        doiStatus.id = 'doi-status';
+        doiStatus.style.cssText = 'font-size:0.8rem;margin-top:0.5rem;color:var(--text-muted);display:none;';
+        urlInput.parentNode.insertBefore(doiStatus, urlInput.nextSibling);
+    }
+    
+    let doiTimeout = null;
     urlInput.addEventListener('input', () => {
         const val = urlInput.value.trim();
+        clearTimeout(doiTimeout);
+        
         // Detect bare DOI like 10.xxxx/...
+        let doi = null;
         if (/^10\.\d{4,}\/.+/.test(val)) {
-            urlInput.value = `https://doi.org/${val}`;
+            doi = val;
+        } else if (val.includes('doi.org/')) {
+            const m = val.match(/doi\.org\/(10\..+)/);
+            if (m) doi = m[1];
+        }
+        
+        if (doi) {
+            doiStatus.style.display = 'block';
+            doiStatus.innerHTML = '⚡ DOI detected! Looking for open-access PDF via Unpaywall...';
+            doiStatus.style.color = 'var(--accent-cyan)';
+            
+            doiTimeout = setTimeout(async () => {
+                try {
+                    const resp = await fetch(`/api/resolve-doi/${encodeURIComponent(doi)}`);
+                    const data = await resp.json();
+                    if (data.pdf_url) {
+                        urlInput.value = data.pdf_url;
+                        doiStatus.innerHTML = '✅ Open-access PDF found! URL updated automatically.';
+                        doiStatus.style.color = '#22c55e';
+                        validateSubmitButton();
+                    } else {
+                        doiStatus.innerHTML = `⚠️ ${data.error || 'No open-access PDF found. Please download manually and use Upload File tab.'}`;
+                        doiStatus.style.color = 'var(--accent-amber)';
+                    }
+                } catch {
+                    doiStatus.innerHTML = '⚠️ Could not resolve DOI. Please try the Upload File tab.';
+                    doiStatus.style.color = 'var(--accent-rose)';
+                }
+            }, 800);
+        } else {
+            doiStatus.style.display = 'none';
         }
     });
 }
@@ -540,6 +584,11 @@ function handleSSEEvent(type, rawData) {
             }
             break;
 
+
+        case 'original_english':
+            originalMarkdown = data;
+            break;
+
         case 'translation':
             renderTranslation(data);
             break;
@@ -713,6 +762,58 @@ function downloadAsPDF() {
     window.print();
 }
 
+// ── Download as DOCX ──
+async function downloadDocx() {
+    const md = rawMarkdown || outputBody.dataset.rawMarkdown;
+    if (!md) { showNotification('No translation to export.', 'error'); return; }
+    try {
+        const resp = await fetch('/api/export/docx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ markdown: md, filename: `peertranslate_${languageSelect.value || 'translation'}` })
+        });
+        if (!resp.ok) throw new Error('Export failed');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `peertranslate_${languageSelect.value || 'translation'}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showNotification('DOCX downloaded!', 'success');
+    } catch (e) {
+        showNotification('DOCX export failed.', 'error');
+    }
+}
+
+// ── Download as LaTeX ──
+async function downloadLatex() {
+    const md = rawMarkdown || outputBody.dataset.rawMarkdown;
+    if (!md) { showNotification('No translation to export.', 'error'); return; }
+    try {
+        const resp = await fetch('/api/export/latex', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ markdown: md, filename: `peertranslate_${languageSelect.value || 'translation'}` })
+        });
+        if (!resp.ok) throw new Error('Export failed');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `peertranslate_${languageSelect.value || 'translation'}.tex`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showNotification('LaTeX downloaded!', 'success');
+    } catch (e) {
+        showNotification('LaTeX export failed.', 'error');
+    }
+}
+
 // Keep old name for backward compat
 function downloadTranslation() { downloadMarkdownFile(); }
 
@@ -731,6 +832,10 @@ function escapeHtml(text) {
 
 // ── Download as PDF ──
 document.getElementById('download-pdf-btn')?.addEventListener('click', () => downloadAsPDF());
+// ── Download as DOCX ──
+document.getElementById('download-docx-btn')?.addEventListener('click', () => downloadDocx());
+// ── Download as LaTeX ──
+document.getElementById('download-latex-btn')?.addEventListener('click', () => downloadLatex());
 // ── Download as Markdown ──
 document.getElementById('download-md-btn')?.addEventListener('click', () => downloadMarkdownFile());
 // ── Copy Full Translation ──

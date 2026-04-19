@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contributor Leaderboard — PeerTranslate</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+    <style>
+        .leaderboard-container {
+            max-width: 900px;
+            margin: 4rem auto;
+            padding: 0 1.5rem;
+        }
+        .leaderboard-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        .leaderboard-header h1 {
+            font-family: var(--font-display);
+            font-size: 2.4rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+        .leaderboard-header p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+        .leaderboard-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-glass);
+            backdrop-filter: blur(24px);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+        .leaderboard-table thead th {
+            font-family: var(--font-display);
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            padding: 1rem 1.25rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-glass);
+        }
+        .leaderboard-table tbody td {
+            padding: 0.9rem 1.25rem;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .leaderboard-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        .leaderboard-table tbody tr:hover {
+            background: rgba(34,211,238,0.04);
+        }
+        .rank-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            font-weight: 800;
+            font-size: 0.85rem;
+            font-family: var(--font-display);
+        }
+        .rank-1 { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #1a1a1a; }
+        .rank-2 { background: linear-gradient(135deg, #94a3b8, #cbd5e1); color: #1a1a1a; }
+        .rank-3 { background: linear-gradient(135deg, #b45309, #d97706); color: white; }
+        .rank-default { background: var(--bg-tertiary); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+        .contributor-name { font-weight: 600; }
+        .contributor-affiliation {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            display: block;
+            margin-top: 2px;
+        }
+        .lang-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: var(--radius-pill);
+            background: rgba(34,211,238,0.1);
+            color: var(--accent-cyan);
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+        .empty-state .emoji { font-size: 3rem; margin-bottom: 1rem; }
+        .cta-btn {
+            display: inline-block;
+            padding: 10px 24px;
+            background: var(--gradient-primary);
+            color: var(--bg-primary);
+            border-radius: var(--radius-pill);
+            text-decoration: none;
+            font-family: var(--font-display);
+            font-weight: 700;
+            margin-top: 1.5rem;
+            transition: all 0.2s;
+        }
+        .cta-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(34,211,238,0.3); }
+    </style>
+</head>
+<body>
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="/" class="nav-brand">
+                <span class="nav-logo">📄 PeerTranslate</span>
+            </a>
+            <div class="nav-links">
+                <a href="/" class="nav-link">Home</a>
+                <a href="/contribute" class="nav-link">➕ Contribute</a>
+                <a href="https://github.com/muminul-hoque/PeerTranslate" target="_blank" class="github-star-btn">⭐ Star on GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="leaderboard-container">
+        <div class="leaderboard-header">
+            <h1>🏆 Contributor <span class="gradient-text">Leaderboard</span></h1>
+            <p>Our amazing community members who help build better academic glossaries.</p>
+        </div>
+        
+        <div id="leaderboard-content">
+            <div class="empty-state">
+                <div class="emoji">⏳</div>
+                <p>Loading contributors...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadLeaderboard() {
+            const container = document.getElementById('leaderboard-content');
+            try {
+                const response = await fetch('/api/leaderboard');
+                const data = await response.json();
+                
+                if (!data.contributors || data.contributors.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="emoji">🌱</div>
+                            <p>No contributions yet. Be the first to help!</p>
+                            <a href="/contribute" class="cta-btn">➕ Add Glossary Terms</a>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let rows = '';
+                data.contributors.forEach((c, i) => {
+                    const rank = i + 1;
+                    let rankClass = 'rank-default';
+                    if (rank === 1) rankClass = 'rank-1';
+                    else if (rank === 2) rankClass = 'rank-2';
+                    else if (rank === 3) rankClass = 'rank-3';
+                    
+                    const affiliation = c.affiliation ? `<span class="contributor-affiliation">${c.affiliation}</span>` : '';
+                    
+                    rows += `
+                        <tr>
+                            <td><span class="rank-badge ${rankClass}">${rank}</span></td>
+                            <td>
+                                <span class="contributor-name">${c.name}</span>
+                                ${affiliation}
+                            </td>
+                            <td><span class="lang-badge">${c.language}</span></td>
+                            <td>${c.submissions}</td>
+                            <td style="font-weight:700; color:var(--accent-cyan);">${c.term_count || '—'}</td>
+                        </tr>
+                    `;
+                });
+                
+                container.innerHTML = `
+                    <table class="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Contributor</th>
+                                <th>Language</th>
+                                <th>Submissions</th>
+                                <th>Terms</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    <div style="text-align:center;margin-top:2rem;">
+                        <a href="/contribute" class="cta-btn">➕ Join the Leaderboard</a>
+                    </div>
+                `;
+            } catch (err) {
+                console.error('Leaderboard error:', err);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="emoji">⚠️</div>
+                        <p>Failed to load leaderboard. Please try again later.</p>
+                    </div>
+                `;
+            }
+        }
+        
+        loadLeaderboard();
+    </script>
+</body>
+</html>

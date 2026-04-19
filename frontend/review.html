@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Contributions — PeerTranslate</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .review-container { max-width: 1000px; margin: 3rem auto; padding: 0 1.5rem; }
+        .review-header { text-align: center; margin-bottom: 2.5rem; }
+        .review-header h1 { font-family: var(--font-display); font-size: 2.2rem; font-weight: 800; margin-bottom: 0.5rem; }
+        .review-header p { color: var(--text-secondary); }
+        .contribution-card {
+            background: var(--bg-glass);
+            backdrop-filter: blur(24px);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            margin-bottom: 1.25rem;
+            transition: border-color 0.2s;
+        }
+        .contribution-card:hover { border-color: var(--border-accent); }
+        .card-meta {
+            display: flex; align-items: center; gap: 1rem;
+            margin-bottom: 1rem; flex-wrap: wrap;
+        }
+        .card-meta .name { font-weight: 700; color: var(--text-primary); }
+        .card-meta .affil { font-size: 0.8rem; color: var(--text-muted); }
+        .card-meta .lang-badge {
+            padding: 2px 10px; border-radius: var(--radius-pill);
+            background: rgba(34,211,238,0.1); color: var(--accent-cyan);
+            font-size: 0.8rem; font-weight: 600;
+        }
+        .card-meta .domain-badge {
+            padding: 2px 10px; border-radius: var(--radius-pill);
+            background: rgba(139,92,246,0.1); color: var(--accent-violet);
+            font-size: 0.8rem; font-weight: 600;
+        }
+        .card-meta .date { font-size: 0.75rem; color: var(--text-muted); margin-left: auto; }
+        .terms-table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.9rem; }
+        .terms-table th {
+            text-align: left; padding: 0.4rem 0.75rem;
+            background: var(--bg-tertiary); color: var(--text-muted);
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em;
+        }
+        .terms-table td { padding: 0.4rem 0.75rem; color: var(--text-primary); border-bottom: 1px solid var(--border-subtle); }
+        .card-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+        .approve-btn, .reject-btn {
+            padding: 8px 20px; border: none; border-radius: var(--radius-pill);
+            font-family: var(--font-display); font-weight: 700; font-size: 0.85rem;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .approve-btn { background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+        .approve-btn:hover { background: rgba(34,197,94,0.25); transform: translateY(-1px); }
+        .reject-btn { background: rgba(244,63,94,0.15); color: var(--accent-rose); border: 1px solid rgba(244,63,94,0.3); }
+        .reject-btn:hover { background: rgba(244,63,94,0.25); transform: translateY(-1px); }
+        .empty-state { text-align: center; padding: 4rem; color: var(--text-muted); }
+        .empty-state .emoji { font-size: 3rem; margin-bottom: 1rem; }
+        .status-toast {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            padding: 10px 24px; border-radius: var(--radius-pill);
+            font-weight: 600; font-size: 0.85rem; z-index: 9999;
+            animation: fadeInUp 0.3s ease;
+        }
+        .status-toast.approve { background: rgba(34,197,94,0.2); color: #22c55e; border: 1px solid rgba(34,197,94,0.4); }
+        .status-toast.reject { background: rgba(244,63,94,0.2); color: var(--accent-rose); border: 1px solid rgba(244,63,94,0.4); }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="nav-brand"><span class="nav-logo">📄 PeerTranslate</span></a>
+            <div class="nav-links">
+                <a href="/" class="nav-link">Home</a>
+                <a href="/contribute" class="nav-link">➕ Contribute</a>
+                <a href="/leaderboard" class="nav-link">🏆 Leaderboard</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="review-container">
+        <div class="review-header">
+            <h1>🔍 Review <span class="gradient-text">Contributions</span></h1>
+            <p>Review and approve community-submitted glossary terms before they go live.</p>
+        </div>
+        <div id="review-content">
+            <div class="empty-state"><div class="emoji">⏳</div><p>Loading pending contributions...</p></div>
+        </div>
+    </div>
+
+    <script>
+        async function loadPending() {
+            const container = document.getElementById('review-content');
+            try {
+                const resp = await fetch('/api/review/pending');
+                const data = await resp.json();
+                
+                if (!data.contributions || data.contributions.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><div class="emoji">✅</div><p>No pending contributions. All caught up!</p></div>';
+                    return;
+                }
+                
+                let html = '';
+                data.contributions.forEach(c => {
+                    let termsRows = '';
+                    Object.entries(c.terms).forEach(([eng, tgt]) => {
+                        termsRows += `<tr><td>${eng}</td><td style="font-weight:600;">${tgt}</td></tr>`;
+                    });
+                    
+                    html += `
+                        <div class="contribution-card" id="card-${c.id}">
+                            <div class="card-meta">
+                                <span class="name">${c.contributor}</span>
+                                ${c.affiliation ? `<span class="affil">${c.affiliation}</span>` : ''}
+                                <span class="lang-badge">${c.language}</span>
+                                <span class="domain-badge">${c.domain}</span>
+                                <span class="date">${c.created_at}</span>
+                            </div>
+                            <table class="terms-table">
+                                <thead><tr><th>English Term</th><th>Translation</th></tr></thead>
+                                <tbody>${termsRows}</tbody>
+                            </table>
+                            <div class="card-actions">
+                                <button class="approve-btn" onclick="reviewAction(${c.id}, 'approve')">✅ Approve</button>
+                                <button class="reject-btn" onclick="reviewAction(${c.id}, 'reject')">❌ Reject</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = '<div class="empty-state"><div class="emoji">⚠️</div><p>Failed to load. Try again.</p></div>';
+            }
+        }
+        
+        async function reviewAction(id, action) {
+            try {
+                const resp = await fetch('/api/review/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contribution_id: id, action })
+                });
+                const data = await resp.json();
+                
+                // Remove card with animation
+                const card = document.getElementById(`card-${id}`);
+                if (card) {
+                    card.style.transition = 'all 0.3s ease';
+                    card.style.opacity = '0';
+                    card.style.transform = 'translateX(100px)';
+                    setTimeout(() => card.remove(), 300);
+                }
+                
+                // Show toast
+                showToast(action === 'approve' ? '✅ Approved!' : '❌ Rejected', action);
+            } catch (err) {
+                alert('Action failed. Please try again.');
+            }
+        }
+        
+        function showToast(msg, type) {
+            const toast = document.createElement('div');
+            toast.className = `status-toast ${type}`;
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+        
+        loadPending();
+    </script>
+</body>
+</html>

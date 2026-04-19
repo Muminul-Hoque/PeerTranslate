@@ -356,6 +356,9 @@ async def translate_paper(
     # STEP 3: TRANSLATION PIPELINE
     # ═══════════════════════════════════════════════════════════════
     yield {"type": "status", "data": "✅ Extracted original English Markdown."}
+    
+    # Send original English to frontend for side-by-side view
+    yield {"type": "original_english", "data": original_english_text}
 
     # 4. Start Real-Time 4-Pass Pipeline (Iterative Section-by-Section)
     effective_label = user_provider.upper() if user_provider else "GOOGLE"

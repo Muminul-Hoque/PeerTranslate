@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "PeerTranslate — Translate Research Papers",
+  "version": "1.0.0",
+  "description": "One-click translate any research paper on ArXiv, PubMed, or bioRxiv into your native language using PeerTranslate.",
+  "permissions": ["activeTab"],
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://arxiv.org/abs/*",
+        "https://arxiv.org/pdf/*",
+        "https://pubmed.ncbi.nlm.nih.gov/*",
+        "https://www.biorxiv.org/content/*",
+        "https://doi.org/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"]
+    }
+  ]
+}

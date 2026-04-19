@@ -422,6 +422,14 @@ async def serve_leaderboard():
         raise HTTPException(status_code=404, detail="Leaderboard page not found.")
     return HTMLResponse(content=path.read_text(encoding="utf-8"))
 
+@app.get("/review", response_class=HTMLResponse)
+async def serve_review():
+    """Serve the collaborative review page."""
+    path = frontend_dir / "review.html"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Review page not found.")
+    return HTMLResponse(content=path.read_text(encoding="utf-8"))
+
 class FlagRequest(BaseModel):
     hash_key: str
     reason: str
@@ -439,6 +447,134 @@ async def flag_endpoint(request: FlagRequest):
         return {"status": "ok"}
     else:
         raise HTTPException(status_code=404, detail="Translation not found in cache.")
+
+
+# ──────────────────────────────────────────────
+# Export Endpoints
+# ──────────────────────────────────────────────
+
+class ExportRequest(BaseModel):
+    markdown: str
+    filename: Optional[str] = "peertranslate_output"
+
+@app.post("/api/export/docx")
+async def export_docx(data: ExportRequest):
+    """Convert markdown translation to DOCX."""
+    from backend.exporter import markdown_to_docx
+    from fastapi.responses import Response
+    try:
+        docx_bytes = markdown_to_docx(data.markdown, title=data.filename)
+        return Response(
+            content=docx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{data.filename}.docx"'}
+        )
+    except Exception as e:
+        logger.error(f"DOCX export failed: {e}")
+        raise HTTPException(status_code=500, detail=f"DOCX export failed: {str(e)}")
+
+@app.post("/api/export/latex")
+async def export_latex(data: ExportRequest):
+    """Convert markdown translation to LaTeX."""
+    from backend.exporter import markdown_to_latex
+    from fastapi.responses import Response
+    try:
+        latex_str = markdown_to_latex(data.markdown)
+        return Response(
+            content=latex_str.encode("utf-8"),
+            media_type="application/x-tex",
+            headers={"Content-Disposition": f'attachment; filename="{data.filename}.tex"'}
+        )
+    except Exception as e:
+        logger.error(f"LaTeX export failed: {e}")
+        raise HTTPException(status_code=500, detail=f"LaTeX export failed: {str(e)}")
+
+
+# ──────────────────────────────────────────────
+# DOI → Open-Access PDF Resolver (Unpaywall)
+# ──────────────────────────────────────────────
+
+@app.get("/api/resolve-doi/{doi:path}")
+async def resolve_doi(doi: str):
+    """Resolve a DOI to an open-access PDF URL via Unpaywall API."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"https://api.unpaywall.org/v2/{doi}",
+                params={"email": "peertranslate@users.noreply.github.com"}
+            )
+            if resp.status_code != 200:
+                return JSONResponse(content={"pdf_url": None, "error": "DOI not found in Unpaywall."})
+            
+            data = resp.json()
+            best_oa = data.get("best_oa_location") or {}
+            pdf_url = best_oa.get("url_for_pdf")
+            landing_url = best_oa.get("url_for_landing_page")
+            
+            if pdf_url:
+                return JSONResponse(content={"pdf_url": pdf_url, "source": "unpaywall_oa"})
+            elif landing_url:
+                return JSONResponse(content={"pdf_url": None, "landing_url": landing_url, "error": "Open-access landing page found but no direct PDF. Try downloading from the landing page."})
+            else:
+                return JSONResponse(content={"pdf_url": None, "error": "This paper is not available as open-access. Please download the PDF manually."})
+    except Exception as e:
+        logger.error(f"DOI resolve error: {e}")
+        return JSONResponse(content={"pdf_url": None, "error": f"Failed to resolve DOI: {str(e)}"})
+
+
+# ──────────────────────────────────────────────
+# Collaborative Review Endpoint
+# ──────────────────────────────────────────────
+
+@app.get("/api/review/pending")
+async def get_pending_contributions():
+    """Return all pending community contributions for review."""
+    try:
+        conn = _get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, language, domain, terms_json, contributor_name,
+                   contributor_affiliation, status, created_at
+            FROM community_contributions
+            WHERE status = 'pending'
+            ORDER BY created_at DESC
+            LIMIT 100
+        """)
+        rows = cursor.fetchall()
+        contributions = [
+            {
+                "id": r[0], "language": r[1], "domain": r[2],
+                "terms": json.loads(r[3]), "contributor": r[4],
+                "affiliation": r[5] or "", "status": r[6], "created_at": str(r[7])
+            } for r in rows
+        ]
+        return JSONResponse(content={"contributions": contributions})
+    except Exception as e:
+        logger.error(f"Review endpoint error: {e}")
+        return JSONResponse(content={"contributions": []})
+
+class ReviewAction(BaseModel):
+    contribution_id: int
+    action: str  # "approve" or "reject"
+
+@app.post("/api/review/action")
+async def review_contribution(data: ReviewAction):
+    """Approve or reject a pending contribution."""
+    if data.action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'")
+    try:
+        new_status = "approved" if data.action == "approve" else "rejected"
+        conn = _get_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE community_contributions SET status = ? WHERE id = ?",
+            (new_status, data.contribution_id)
+        )
+        conn.commit()
+        return {"status": "ok", "new_status": new_status}
+    except Exception as e:
+        logger.error(f"Review action error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update contribution.")
 
 
 # ──────────────────────────────────────────────
