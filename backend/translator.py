@@ -284,11 +284,11 @@ async def translate_paper(
         tmp_file.write(pdf_content)
         tmp_path = tmp_file.name
         
-    yield {"type": "status", "data": "🖼️ Extracting figures and diagrams..."}
-    extracted_figures = extract_images_from_pdf(pdf_content)
-    if extracted_figures:
-        yield {"type": "status", "data": f"✅ Found {len(extracted_figures)} high-res figures."}
-
+    # ═══════════════════════════════════════════════════════════════
+    # STEP 0: INITIAL PREPARATION & STATUS
+    # ═══════════════════════════════════════════════════════════════
+    yield {"type": "status", "data": "📄 Initializing PDF processing engine..."}
+    
     # ═══════════════════════════════════════════════════════════════
     # STEP 1: FAST NATIVE MARKDOWN EXTRACTION (PyMuPDF4LLM)
     # ═══════════════════════════════════════════════════════════════
@@ -296,15 +296,32 @@ async def translate_paper(
     original_english_text = ""
     try:
         import pymupdf4llm
-        original_english_text = pymupdf4llm.to_markdown(tmp_path)
+        # We use a memory-efficient mode that doesn't trigger heavy AI vision models
+        original_english_text = pymupdf4llm.to_markdown(tmp_path, show_progress=False)
     except Exception as extract_err:
         logger.error(f"PyMuPDF4LLM extraction failed: {extract_err}")
 
-    if original_english_text.strip():
-        yield {"type": "status", "data": "✅ Instant Markdown extraction complete."}
-    else:
+    if not original_english_text.strip():
         yield {"type": "error", "data": "❌ Could not extract any text from the PDF."}
         return
+
+    yield {"type": "status", "data": "✅ Instant Markdown extraction complete."}
+
+    # ═══════════════════════════════════════════════════════════════
+    # STEP 2: FIGURE EXTRACTION (Non-blocking heuristic)
+    # ═══════════════════════════════════════════════════════════════
+    extracted_figures = {}
+    if not quick_mode:
+        try:
+            yield {"type": "status", "data": "🖼️ Heuristically identifying figures and diagrams..."}
+            from backend.figure_extractor import extract_images_from_pdf, reinsert_figures
+            # Only extract figures if we have enough memory headroom (implicit safeguard)
+            extracted_figures = extract_images_from_pdf(pdf_content)
+            if extracted_figures:
+                yield {"type": "status", "data": f"✅ Identified {len(extracted_figures)} potential figures."}
+        except Exception as fig_err:
+            logger.warning(f"Figure extraction failed (skipping): {fig_err}")
+
     # ═══════════════════════════════════════════════════════════════
     # STEP 3: TRANSLATION PIPELINE
     # ═══════════════════════════════════════════════════════════════

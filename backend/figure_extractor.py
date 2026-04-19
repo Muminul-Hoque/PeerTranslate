@@ -28,38 +28,37 @@ def extract_images_from_pdf(pdf_bytes: bytes) -> Dict[int, str]:
 
     figures: Dict[int, str] = {}
     figure_counter = 1
+    MAX_FIGURES = 10  # Memory safety limit for free-tier servers
 
     for page_num in range(len(doc)):
+        if len(figures) >= MAX_FIGURES:
+            logger.warning(f"Reached MAX_FIGURES ({MAX_FIGURES}). Stopping extraction for memory safety.")
+            break
+            
         page = doc[page_num]
         image_list = page.get_images(full=True)
         
         # Sort images on page by their vertical position (y0)
-        # This is a heuristic to order them top-to-bottom
         try:
-            # get_image_info() gives bounding boxes
             image_info = page.get_image_info()
-            # Sort by y0 (top coordinate)
             image_info.sort(key=lambda img: img['bbox'][1])
-            
-            # Map xref to sorted order
             sorted_xrefs = [img['xref'] for img in image_info]
         except Exception:
             sorted_xrefs = [img[0] for img in image_list]
 
         for xref in sorted_xrefs:
+            if len(figures) >= MAX_FIGURES:
+                break
             try:
                 base_image = doc.extract_image(xref)
                 image_bytes = base_image["image"]
                 image_ext = base_image["ext"]
                 
-                # Skip tiny images (like logos or icons)
-                if len(image_bytes) < 5000:  
+                # Skip tiny images (logos) AND very large images (>2MB) to prevent Base64 OOM
+                if len(image_bytes) < 5000 or len(image_bytes) > 2 * 1024 * 1024:  
                     continue
                     
                 b64_image = base64.b64encode(image_bytes).decode("utf-8")
-                
-                # We simply index them sequentially as they appear in the PDF.
-                # More advanced heuristics would map them to "Figure X" captions.
                 figures[figure_counter] = f"data:image/{image_ext};base64,{b64_image}"
                 figure_counter += 1
             except Exception as e:
