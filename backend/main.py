@@ -73,7 +73,7 @@ if frontend_dir.exists():
 class TermContribution(BaseModel):
     language: str
     domain: str
-    contributor_name: str
+    contributor_name: Optional[str] = None
     affiliation: Optional[str] = None
     terms: dict
 
@@ -85,6 +85,8 @@ async def submit_contribution(data: TermContribution):
         conn = _get_db()
         cursor = conn.cursor()
         
+        name_to_save = data.contributor_name.strip() if data.contributor_name else "Anonymous"
+        
         cursor.execute(
             """
             INSERT INTO community_contributions (language, domain, terms_json, contributor_name, contributor_affiliation)
@@ -94,7 +96,7 @@ async def submit_contribution(data: TermContribution):
                 data.language,
                 data.domain,
                 json.dumps(data.terms, ensure_ascii=False),
-                data.contributor_name,
+                name_to_save,
                 data.affiliation
             )
         )
