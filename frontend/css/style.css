@@ -1067,10 +1067,32 @@ body::before {
     background: var(--text-muted);
 }
 
+/* ── Mobile Hamburger Menu ── */
+.nav-hamburger {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    z-index: 110;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
     .hero h1 {
         font-size: 1.8rem;
+    }
+
+    .hero {
+        padding: var(--space-xl) 0;
+    }
+
+    .hero-subtitle {
+        font-size: 1rem;
+        padding: 0 var(--space-sm);
     }
 
     .hero-features {
@@ -1079,18 +1101,70 @@ body::before {
         gap: var(--space-sm);
     }
 
+    /* ── Hamburger Nav ── */
+    .nav-hamburger {
+        display: block;
+    }
+
+    .nav-links {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(10, 14, 26, 0.97);
+        backdrop-filter: blur(24px);
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-xl);
+        z-index: 105;
+    }
+
+    .nav-links.mobile-open {
+        display: flex;
+    }
+
+    .nav-links .nav-link {
+        font-size: 1.2rem;
+    }
+
+    .nav-links .github-star-btn {
+        font-size: 1rem;
+        padding: 10px 24px;
+    }
+
+    /* ── Upload Panel ── */
+    .upload-panel {
+        padding: var(--space-lg) var(--space-md);
+        margin: 0 auto var(--space-xl);
+    }
+
+    .drop-zone {
+        padding: var(--space-xl) var(--space-md);
+    }
+
+    /* ── Controls ── */
     .controls-row {
         flex-direction: column;
     }
 
-    .nav-links {
-        gap: var(--space-sm);
+    .translate-btn {
+        width: 100%;
+        justify-content: center;
     }
 
-    .nav-link span {
-        display: none;
+    /* ── Side-by-Side View ── */
+    #sidebyside-container > div {
+        grid-template-columns: 1fr !important;
     }
 
+    #sidebyside-container .output-body {
+        height: 400px !important;
+    }
+
+    /* ── Results ── */
     .verification-grid {
         grid-template-columns: 1fr;
     }
@@ -1099,6 +1173,168 @@ body::before {
         flex-direction: column;
         gap: var(--space-sm);
         align-items: flex-start;
+        padding: var(--space-md);
+    }
+
+    .output-actions {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .action-btn {
+        flex: 1;
+        justify-content: center;
+        min-width: 0;
+    }
+
+    .output-body {
+        padding: 1.5rem 1rem !important;
+    }
+
+    /* ── Download Actions ── */
+    .download-actions {
+        flex-direction: column;
+    }
+
+    .download-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* ── How It Works Cards ── */
+    #how-it-works [style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* ── Footer ── */
+    .footer-links {
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+
+    .footer-citation-text {
+        font-size: 0.65rem;
+        word-break: break-all;
+    }
+
+    /* ── Contribute Page Form Fields ── */
+    .contribute-container {
+        margin: 2rem auto !important;
+        padding: 1.25rem !important;
+    }
+
+    .contribute-container [style*="display: flex"][style*="gap: 1rem"] {
+        flex-direction: column !important;
+    }
+
+    .term-row {
+        flex-wrap: wrap;
+    }
+
+    .term-row .term-input {
+        min-width: 0;
+    }
+
+    /* ── Leaderboard ── */
+    .leaderboard-container {
+        margin: 2rem auto !important;
+    }
+
+    .leaderboard-header h1 {
+        font-size: 1.8rem !important;
+    }
+
+    .leaderboard-table {
+        font-size: 0.85rem;
+    }
+
+    .leaderboard-table thead th,
+    .leaderboard-table tbody td {
+        padding: 0.6rem 0.5rem !important;
+    }
+
+    /* ── Review Page ── */
+    .review-container {
+        margin: 2rem auto !important;
+    }
+
+    .review-header h1 {
+        font-size: 1.6rem !important;
+    }
+
+    .card-meta {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 0.5rem !important;
+    }
+
+    .card-meta .date {
+        margin-left: 0 !important;
+    }
+
+    .card-actions {
+        flex-direction: column;
+    }
+
+    .approve-btn, .reject-btn {
+        width: 100%;
+        text-align: center;
+    }
+}
+
+/* ── Extra Small Screens ── */
+@media (max-width: 480px) {
+    .hero h1 {
+        font-size: 1.5rem;
+    }
+
+    .hero-badge {
+        font-size: 0.7rem;
+        padding: 4px 12px;
+    }
+
+    .upload-panel {
+        padding: var(--space-md) var(--space-sm);
+        border-radius: var(--radius-md);
+    }
+
+    .container {
+        padding: 0 var(--space-md);
+    }
+
+    .input-tabs {
+        gap: var(--space-sm);
+    }
+
+    .input-tab {
+        font-size: 0.85rem;
+    }
+
+    .translate-btn {
+        font-size: 0.85rem;
+        padding: 12px 16px;
+    }
+
+    .output-body {
+        padding: 1rem 0.75rem !important;
+        font-size: 0.9rem !important;
+    }
+
+    .output-body h1 {
+        font-size: 1.3rem !important;
+    }
+
+    .output-body h2 {
+        font-size: 1.1rem !important;
+    }
+
+    .leaderboard-table thead th:nth-child(4),
+    .leaderboard-table tbody td:nth-child(4) {
+        display: none;
+    }
+
+    .terms-table {
+        font-size: 0.8rem !important;
     }
 }
 

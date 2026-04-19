@@ -95,12 +95,25 @@
             <a href="/" class="nav-brand">
                 <span class="nav-logo">📄 PeerTranslate</span>
             </a>
+            <button class="nav-hamburger" aria-label="Open menu">☰</button>
             <div class="nav-links">
                 <a href="/" class="nav-link">Home</a>
                 <a href="https://github.com/muminul-hoque/PeerTranslate" target="_blank" class="github-star-btn">⭐ Star on GitHub</a>
             </div>
         </div>
     </nav>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const hamburger = document.querySelector('.nav-hamburger');
+            const navLinks = document.querySelector('.nav-links');
+            if (hamburger && navLinks) {
+                hamburger.addEventListener('click', () => {
+                    navLinks.classList.toggle('mobile-open');
+                });
+            }
+        });
+    </script>
 
     <div class="contribute-container">
         <div class="header-text">

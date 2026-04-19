@@ -221,6 +221,15 @@ function formatFileSize(bytes) {
 
 // ── Event Listeners ──
 function setupEventListeners() {
+    // Hamburger Menu
+    const hamburger = document.getElementById('nav-hamburger');
+    const navLinks = document.getElementById('nav-links');
+    if (hamburger && navLinks) {
+        hamburger.addEventListener('click', () => {
+            navLinks.classList.toggle('mobile-open');
+        });
+    }
+
     fileRemoveBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         removeFile();

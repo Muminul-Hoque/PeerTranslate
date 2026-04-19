@@ -116,6 +116,7 @@
             <a href="/" class="nav-brand">
                 <span class="nav-logo">📄 PeerTranslate</span>
             </a>
+            <button class="nav-hamburger" aria-label="Open menu">☰</button>
             <div class="nav-links">
                 <a href="/" class="nav-link">Home</a>
                 <a href="/contribute" class="nav-link">➕ Contribute</a>
@@ -123,6 +124,18 @@
             </div>
         </div>
     </nav>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const hamburger = document.querySelector('.nav-hamburger');
+            const navLinks = document.querySelector('.nav-links');
+            if (hamburger && navLinks) {
+                hamburger.addEventListener('click', () => {
+                    navLinks.classList.toggle('mobile-open');
+                });
+            }
+        });
+    </script>
 
     <div class="leaderboard-container">
         <div class="leaderboard-header">
