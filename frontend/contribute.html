@@ -106,7 +106,9 @@
         <div class="header-text">
             <h1>Expert Terminology Contribution</h1>
             <p style="color: var(--text-secondary);">Help us improve translations! You don't need to be a coder. Add standard translations for academic terms in your language, and they will be verified and added to our global AI glossaries.</p>
-                <form id="contribute-form">
+        </div>
+
+        <form id="contribute-form">
             <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
                 <div style="flex: 1;">
                     <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted);">Your Name (Optional)</label>
@@ -286,7 +288,6 @@
                         affiliation: affiliation,
                         terms: termDict
                     })
-                });    })
                 });
 
                 if (response.ok) {
