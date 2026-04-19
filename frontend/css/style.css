@@ -1353,3 +1353,186 @@ body::before {
 .tos-hint a:hover {
     text-decoration: underline;
 }
+
+/* ── Progress Bar ── */
+.progress-container {
+    max-width: 800px;
+    margin: 0 auto 1rem;
+}
+.progress-bar-track {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+}
+.progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-pill);
+    transition: width 0.5s var(--ease-out);
+    box-shadow: 0 0 10px rgba(34,211,238,0.4);
+}
+.progress-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 0.4rem;
+    text-align: right;
+}
+
+/* ── Cache Badge ── */
+.cache-badge {
+    max-width: 800px;
+    margin: 0 auto 1rem;
+    padding: 0.6rem 1.2rem;
+    background: rgba(34,211,238,0.08);
+    border: 1px solid rgba(34,211,238,0.25);
+    border-radius: var(--radius-pill);
+    color: var(--accent-cyan);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    animation: fadeIn 0.4s ease;
+}
+
+/* ── Quick Mode Toggle ── */
+.quick-mode-toggle {
+    position: relative;
+    display: inline-block;
+    width: 42px;
+    height: 24px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.quick-mode-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.quick-mode-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-pill);
+    transition: all var(--transition-fast);
+}
+.quick-mode-slider::before {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    left: 3px;
+    top: 3px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    transition: all var(--transition-fast);
+}
+.quick-mode-toggle input:checked + .quick-mode-slider {
+    background: rgba(34,211,238,0.15);
+    border-color: var(--accent-cyan);
+}
+.quick-mode-toggle input:checked + .quick-mode-slider::before {
+    transform: translateX(18px);
+    background: var(--accent-cyan);
+    box-shadow: 0 0 8px rgba(34,211,238,0.5);
+}
+
+/* ── PDF-like Output Styling ── */
+.output-body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    background: #ffffff;
+    color: #1a1a1a;
+    padding: 3rem 3.5rem;
+    border-radius: var(--radius-md);
+    line-height: 1.85;
+    font-size: 1rem;
+    min-height: 300px;
+}
+.output-body h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #111;
+    margin-bottom: 0.5rem;
+    border-bottom: 2px solid #ddd;
+    padding-bottom: 0.5rem;
+}
+.output-body h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #111;
+    margin-top: 2rem;
+    margin-bottom: 0.75rem;
+    border-left: 4px solid #22d3ee;
+    padding-left: 0.75rem;
+}
+.output-body h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #333;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+.output-body p {
+    margin-bottom: 1rem;
+    text-align: justify;
+    hyphens: auto;
+}
+.output-body strong { color: #111; }
+.output-body em { font-style: italic; color: #444; }
+.output-body code {
+    background: #f5f5f5;
+    color: #c7254e;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.9em;
+    font-family: monospace;
+}
+.output-body blockquote {
+    border-left: 4px solid #ddd;
+    padding-left: 1rem;
+    color: #555;
+    margin: 1rem 0;
+}
+.output-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+}
+.output-body th {
+    background: #f0f0f0;
+    border: 1px solid #ccc;
+    padding: 0.5rem 0.75rem;
+    font-weight: 700;
+    text-align: left;
+}
+.output-body td {
+    border: 1px solid #ccc;
+    padding: 0.5rem 0.75rem;
+}
+
+/* ── Print / PDF Export ── */
+@media print {
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { background: white; color: black; }
+    .navbar, .hero, .upload-panel-section, .results-section .status-log,
+    .verification-panel, .download-actions, .output-header,
+    .progress-container, .cache-badge, nav, footer { display: none !important; }
+    .results-section { display: block !important; margin: 0; }
+    .output-body {
+        background: white;
+        color: black;
+        padding: 0;
+        box-shadow: none;
+        border: none;
+        font-family: 'Georgia', 'Times New Roman', serif;
+        font-size: 11pt;
+        line-height: 1.7;
+    }
+    .output-body h1, .output-body h2, .output-body h3 { page-break-after: avoid; }
+    .output-body p { orphans: 3; widows: 3; }
+    @page { size: A4; margin: 2.5cm; }
+}

@@ -228,6 +228,7 @@ async def translate(
     judge_provider: Optional[str] = Form(default="google"),
     judge_model: Optional[str] = Form(None),
     judge_api_key: Optional[str] = Form(None),
+    quick_mode: Optional[str] = Form(None),
 ):
     """
     Accept a PDF upload or a URL, and stream the translation pipeline
@@ -343,6 +344,8 @@ async def translate(
         f"has_api_key={bool(api_key)}"
     )
 
+    is_quick_mode = quick_mode and quick_mode.lower() == 'true'
+    
     async def event_generator():
         """Generate SSE events from the translation pipeline."""
         try:
@@ -355,7 +358,8 @@ async def translate(
                 user_provider,
                 judge_provider,
                 judge_model,
-                judge_api_key
+                judge_api_key,
+                quick_mode=is_quick_mode
             ):
                 yield {
                     "event": event["type"],
@@ -375,6 +379,48 @@ async def translate(
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok", "version": "0.1.0"}
+
+
+@app.get("/api/leaderboard")
+async def get_leaderboard():
+    """Return top glossary contributors by term count."""
+    try:
+        import json as _json
+        conn = _get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT contributor_name, contributor_affiliation, language,
+                   COUNT(*) as submissions,
+                   SUM(LENGTH(terms_json) - LENGTH(REPLACE(terms_json, '":', ''))) as approx_terms
+            FROM community_contributions
+            WHERE status != 'rejected'
+            GROUP BY contributor_name, contributor_affiliation, language
+            ORDER BY approx_terms DESC
+            LIMIT 50
+        """)
+        rows = cursor.fetchall()
+        contributors = [
+            {
+                "name": r[0],
+                "affiliation": r[1] or "",
+                "language": r[2],
+                "submissions": r[3],
+                "term_count": r[4]
+            } for r in rows
+        ]
+        return JSONResponse(content={"contributors": contributors})
+    except Exception as e:
+        logger.error(f"Leaderboard error: {e}")
+        return JSONResponse(content={"contributors": []})
+
+
+@app.get("/leaderboard", response_class=HTMLResponse)
+async def serve_leaderboard():
+    """Serve the contributor leaderboard page."""
+    path = frontend_dir / "leaderboard.html"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Leaderboard page not found.")
+    return HTMLResponse(content=path.read_text(encoding="utf-8"))
 
 class FlagRequest(BaseModel):
     hash_key: str

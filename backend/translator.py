@@ -221,6 +221,7 @@ async def translate_paper(
     judge_provider: str = "google",
     judge_model: Optional[str] = None,
     judge_api_key: Optional[str] = None,
+    quick_mode: bool = False,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     
     language_name = _get_language_name(target_language)
@@ -238,11 +239,11 @@ async def translate_paper(
     pdf_hash = get_hash(pdf_content, target_language)
     cached_data = get_cached_translation(pdf_content, target_language, settings.similarity_threshold)
     
-    # Always send the hash key so the frontend can report issues
-    yield {"type": "cache_info", "data": {"hash_key": pdf_hash}}
+    yield {"type": "cache_info", "data": {"hash_key": pdf_hash, "from_cache": False}}
     
     if cached_data:
         yield {"type": "status", "data": "🌟 Found verified translation in Community Cache!"}
+        yield {"type": "cache_info", "data": {"hash_key": pdf_hash, "from_cache": True}}
         
         # We simulate the verification event from the score
         score = cached_data["verification_score"]
@@ -364,6 +365,18 @@ async def translate_paper(
     back_translation_prompt = _build_back_translation_prompt(language_name)
     
     sections = split_into_sections(original_english_text)
+    
+    # Quick Mode: only translate Abstract, Introduction, Conclusion, Summary
+    if quick_mode:
+        QUICK_KEYWORDS = {'abstract', 'introduction', 'conclusion', 'summary', 'concluding', 'discussion'}
+        filtered = [s for s in sections if any(kw in s['title'].lower() for kw in QUICK_KEYWORDS)]
+        # Always keep the first section (title/header) and at least some content
+        if sections and (not filtered or sections[0] not in filtered):
+            filtered.insert(0, sections[0])
+        if filtered:
+            sections = filtered
+            yield {"type": "status", "data": f"⚡ Quick Mode: translating {len(sections)} key sections only."}
+    
     full_translated_markdown = ""
     section_scores = []
     

@@ -1,17 +1,16 @@
 /**
  * PeerTranslate — Frontend Application
- *
- * Handles drag-and-drop PDF upload, SSE streaming of translation,
- * Markdown rendering, and verification score visualization.
  */
 
 // ── State ──
 let selectedFile = null;
 let isTranslating = false;
-let eventSource = null;
 let rawMarkdown = '';
-let isGenerating = false;
+let originalMarkdown = '';
 let currentHashKey = null;
+let totalSections = 0;
+let completedSections = 0;
+let sideBySideActive = false;
 
 // ── DOM References ──
 const dropZone = document.getElementById('drop-zone');
@@ -20,12 +19,9 @@ const fileInfo = document.getElementById('file-info');
 const fileName = document.getElementById('file-name');
 const fileSize = document.getElementById('file-size');
 const fileRemoveBtn = document.getElementById('file-remove');
-
-// New URL and Tabs references
 const inputTabs = document.querySelectorAll('.input-tab');
 const tabContents = document.querySelectorAll('.tab-content');
 const urlInput = document.getElementById('url-input');
-
 const languageSelect = document.getElementById('language-select');
 const translateBtn = document.getElementById('translate-btn');
 const resultsSection = document.getElementById('results-section');
@@ -36,13 +32,32 @@ const verificationGrid = document.getElementById('verification-grid');
 const outputBody = document.getElementById('output-body');
 const copyBtn = document.getElementById('copy-btn');
 const downloadBtn = document.getElementById('download-btn');
+const progressContainer = document.getElementById('progress-container');
+const progressBarFill = document.getElementById('progress-bar-fill');
+const progressLabel = document.getElementById('progress-label');
+const cacheBadge = document.getElementById('cache-badge');
+const sidebysideBtn = document.getElementById('sidebyside-btn');
+const sidebysideContainer = document.getElementById('sidebyside-container');
 
 // ── Initialize ──
 document.addEventListener('DOMContentLoaded', () => {
     loadLanguages();
     setupDragDrop();
     setupEventListeners();
+    setupDOIDetection();
 });
+
+// ── DOI Auto Detection ──
+function setupDOIDetection() {
+    if (!urlInput) return;
+    urlInput.addEventListener('input', () => {
+        const val = urlInput.value.trim();
+        // Detect bare DOI like 10.xxxx/...
+        if (/^10\.\d{4,}\/.+/.test(val)) {
+            urlInput.value = `https://doi.org/${val}`;
+        }
+    });
+}
 
 // ── Load Available Languages ──
 async function loadLanguages() {
@@ -188,9 +203,33 @@ function setupEventListeners() {
     urlInput.addEventListener('input', validateSubmitButton);
 
     translateBtn.addEventListener('click', startTranslation);
-
     copyBtn.addEventListener('click', copyTranslation);
-    downloadBtn.addEventListener('click', downloadTranslation);
+    downloadBtn.addEventListener('click', () => downloadMarkdownFile());
+
+    // Side-by-side toggle
+    if (sidebysideBtn) {
+        sidebysideBtn.addEventListener('click', () => {
+            sideBySideActive = !sideBySideActive;
+            if (sideBySideActive) {
+                sidebysideContainer.style.display = 'block';
+                outputBody.style.display = 'none';
+                sidebysideBtn.textContent = '📄 Single View';
+                // populate side panels
+                const sideTrans = document.getElementById('output-body-sidebyside');
+                const sideOrig = document.getElementById('original-body');
+                if (sideTrans && rawMarkdown) sideTrans.innerHTML = outputBody.innerHTML;
+                if (sideOrig && originalMarkdown) {
+                    sideOrig.innerHTML = typeof marked !== 'undefined' ? marked.parse(originalMarkdown) : `<pre>${originalMarkdown}</pre>`;
+                } else if (sideOrig) {
+                    sideOrig.innerHTML = '<p style="color:#999;text-align:center;margin-top:2rem;">Original English not available for this paper.</p>';
+                }
+            } else {
+                sidebysideContainer.style.display = 'none';
+                outputBody.style.display = 'block';
+                sidebysideBtn.textContent = '📖 Side-by-Side';
+            }
+        });
+    }
 
     // ToS checkbox gates the translate button
     const tosCheckbox = document.getElementById('tos-checkbox');
@@ -314,6 +353,18 @@ async function startTranslation() {
     isTranslating = true;
     translateBtn.classList.add('loading');
     translateBtn.disabled = true;
+    rawMarkdown = '';
+    originalMarkdown = '';
+    totalSections = 0;
+    completedSections = 0;
+    sideBySideActive = false;
+    if (sidebysideContainer) sidebysideContainer.style.display = 'none';
+    if (outputBody) outputBody.style.display = 'block';
+    if (sidebysideBtn) { sidebysideBtn.style.display = 'none'; sidebysideBtn.textContent = '📖 Side-by-Side'; }
+    if (cacheBadge) cacheBadge.style.display = 'none';
+    if (progressContainer) progressContainer.style.display = 'block';
+    if (progressBarFill) progressBarFill.style.width = '3%';
+    if (progressLabel) progressLabel.textContent = 'Starting pipeline...';
 
     // Show results section
     resultsSection.classList.add('visible');
@@ -352,6 +403,12 @@ async function startTranslation() {
     if (judgeProvider) formData.append('judge_provider', judgeProvider);
     if (judgeModel) formData.append('judge_model', judgeModel);
     if (judgeApiKey) formData.append('judge_api_key', judgeApiKey);
+
+    // Append Quick Mode
+    const quickMode = document.getElementById('quick-mode-checkbox');
+    if (quickMode && quickMode.checked) {
+        formData.append('quick_mode', 'true');
+    }
 
     console.info('>>> SUBMITTING TRANSLATION:', {
         provider: userProvider,
@@ -463,10 +520,24 @@ function handleSSEEvent(type, rawData) {
     switch (type) {
         case 'status':
             addStatusEntry(data);
+            // Parse section count from status messages like "Translating section 3/21..."
+            const sectionMatch = typeof data === 'string' && data.match(/(\d+)\/(\d+)/);
+            if (sectionMatch) {
+                completedSections = parseInt(sectionMatch[1]);
+                totalSections = parseInt(sectionMatch[2]);
+                const pct = Math.min(95, Math.round((completedSections / totalSections) * 90) + 5);
+                if (progressBarFill) progressBarFill.style.width = `${pct}%`;
+                if (progressLabel) progressLabel.textContent = `Section ${completedSections}/${totalSections}`;
+            }
             break;
 
         case 'cache_info':
             if (data && data.hash_key) currentHashKey = data.hash_key;
+            // Show cache badge if this was a cache hit
+            if (data && data.from_cache && cacheBadge) {
+                cacheBadge.style.display = 'block';
+                if (progressContainer) progressContainer.style.display = 'none';
+            }
             break;
 
         case 'translation':
@@ -495,7 +566,11 @@ function handleSSEEvent(type, rawData) {
 
         case 'complete':
             addStatusEntry(`🎉 ${data}`);
+            if (progressBarFill) progressBarFill.style.width = '100%';
+            if (progressLabel) progressLabel.textContent = 'Complete!';
+            setTimeout(() => { if (progressContainer) progressContainer.style.display = 'none'; }, 2000);
             showDownloadActions();
+            if (sidebysideBtn) sidebysideBtn.style.display = 'inline-flex';
             break;
     }
 }
@@ -511,16 +586,13 @@ function addStatusEntry(text) {
 
 // ── Render Translation ──
 function renderTranslation(markdownText) {
-    // Use marked.js for Markdown rendering
+    rawMarkdown = markdownText; // store in module-level variable
+    outputBody.dataset.rawMarkdown = markdownText;
     if (typeof marked !== 'undefined') {
         outputBody.innerHTML = marked.parse(markdownText);
     } else {
-        // Fallback: basic Markdown rendering
         outputBody.innerHTML = basicMarkdownRender(markdownText);
     }
-
-    // Store raw markdown for copy/download
-    outputBody.dataset.rawMarkdown = markdownText;
 }
 
 function basicMarkdownRender(text) {
@@ -607,47 +679,42 @@ function formatLabel(label) {
     return labels[label] || label;
 }
 
-// ── Copy & Download ──
+// ── Copy ──
 function copyTranslation() {
-    const rawMarkdown = outputBody.dataset.rawMarkdown;
-    if (!rawMarkdown) {
-        showNotification('No translation to copy.', 'error');
-        return;
-    }
-
-    navigator.clipboard
-        .writeText(rawMarkdown)
+    const md = rawMarkdown || outputBody.dataset.rawMarkdown;
+    if (!md) { showNotification('No translation to copy.', 'error'); return; }
+    navigator.clipboard.writeText(md)
         .then(() => {
             showNotification('Copied to clipboard!', 'success');
             copyBtn.textContent = '✓ Copied';
-            setTimeout(() => {
-                copyBtn.innerHTML = '📋 Copy';
-            }, 2000);
+            setTimeout(() => { copyBtn.innerHTML = '📋 Copy'; }, 2000);
         })
-        .catch(() => {
-            showNotification('Failed to copy.', 'error');
-        });
+        .catch(() => showNotification('Failed to copy.', 'error'));
 }
 
-function downloadTranslation() {
-    const rawMarkdown = outputBody.dataset.rawMarkdown;
-    if (!rawMarkdown) {
-        showNotification('No translation to download.', 'error');
-        return;
-    }
-
-    const blob = new Blob([rawMarkdown], { type: 'text/markdown;charset=utf-8' });
+// ── Download as Markdown ──
+function downloadMarkdownFile() {
+    const md = rawMarkdown || outputBody.dataset.rawMarkdown;
+    if (!md) { showNotification('No translation to download.', 'error'); return; }
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `translated_${languageSelect.value}.md`;
+    a.download = `peertranslate_${languageSelect.value || 'translation'}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
     showNotification('Downloaded!', 'success');
 }
+
+// ── Download as PDF (printer dialog) ──
+function downloadAsPDF() {
+    window.print();
+}
+
+// Keep old name for backward compat
+function downloadTranslation() { downloadMarkdownFile(); }
 
 // ── Notification ──
 function showNotification(message, type = 'info') {
@@ -662,23 +729,14 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// ── Download as PDF (Print) ──
-document.getElementById('download-pdf-btn')?.addEventListener('click', () => {
-    window.print();
-});
-
-// ── Download as Markdown (new button) ──
-document.getElementById('download-md-btn')?.addEventListener('click', () => {
-    downloadMarkdown();
-});
-
+// ── Download as PDF ──
+document.getElementById('download-pdf-btn')?.addEventListener('click', () => downloadAsPDF());
+// ── Download as Markdown ──
+document.getElementById('download-md-btn')?.addEventListener('click', () => downloadMarkdownFile());
 // ── Copy Full Translation ──
 document.getElementById('copy-full-btn')?.addEventListener('click', () => {
-    if (rawMarkdown) {
-        navigator.clipboard.writeText(rawMarkdown).then(() => {
-            showNotification('Copied to clipboard!', 'success');
-        });
-    }
+    const md = rawMarkdown || outputBody.dataset.rawMarkdown;
+    if (md) navigator.clipboard.writeText(md).then(() => showNotification('Copied!', 'success'));
 });
 
 // ── Flag Translation Error ──

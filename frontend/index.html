@@ -36,6 +36,9 @@
                 <a href="/contribute" class="nav-link" style="color: var(--accent-cyan); font-weight: bold;">
                     <span>➕ Add Glossary Terms</span>
                 </a>
+                <a href="/leaderboard" class="nav-link">
+                    <span>🏆 Leaderboard</span>
+                </a>
                 <a href="https://github.com/muminul-hoque/PeerTranslate" target="_blank" rel="noopener" class="github-star-btn" id="github-link">
                     ⭐ Star on GitHub
                 </a>
@@ -132,6 +135,17 @@
                 </div>
 
                 <div class="translate-btn-wrapper">
+                    <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Mode</label>
+                    <div style="display:flex;align-items:center;gap:8px;height:48px;">
+                        <label class="quick-mode-toggle" title="Only translate Abstract + Conclusion (~30 seconds)">
+                            <input type="checkbox" id="quick-mode-checkbox">
+                            <span class="quick-mode-slider"></span>
+                        </label>
+                        <span style="font-size:0.8rem;color:var(--text-muted);">⚡ Quick Mode<br><span style="font-size:0.7rem;">(Abstract only)</span></span>
+                    </div>
+                </div>
+
+                <div class="translate-btn-wrapper">
                     <button class="translate-btn" id="translate-btn" disabled>
                         <span class="btn-spinner"></span>
                         <span class="btn-text-default">🚀 Translate Paper</span>
@@ -223,6 +237,19 @@
     <section class="results-section" id="results-section">
         <div class="container">
 
+            <!-- Progress Bar -->
+            <div class="progress-container" id="progress-container" style="display:none;">
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill" id="progress-bar-fill"></div>
+                </div>
+                <div class="progress-label" id="progress-label">Starting...</div>
+            </div>
+
+            <!-- Cache Badge -->
+            <div class="cache-badge" id="cache-badge" style="display:none;">
+                ⚡ Instant — Served from translation cache
+            </div>
+
             <!-- Pipeline Status Log -->
             <div class="status-log" id="status-log"></div>
 
@@ -240,10 +267,25 @@
                 <div class="output-header">
                     <span class="output-title">📝 Translated Paper</span>
                     <div class="output-actions">
+                        <button class="action-btn" id="sidebyside-btn" style="display:none;">📖 Side-by-Side</button>
                         <button class="action-btn" id="copy-btn">📋 Copy</button>
                         <button class="action-btn" id="download-btn">⬇️ Download .md</button>
                     </div>
                 </div>
+                <!-- Side by side container -->
+                <div id="sidebyside-container" style="display:none;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                        <div>
+                            <div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">🇬🇧 Original English</div>
+                            <div class="output-body" id="original-body" style="height:600px;overflow-y:auto;"></div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.75rem;font-weight:700;color:var(--accent-cyan);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">🌐 Translation</div>
+                            <div class="output-body" id="output-body-sidebyside" style="height:600px;overflow-y:auto;"></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Normal single view -->
                 <div class="output-body" id="output-body">
                     <p style="color: var(--text-muted); text-align: center; padding: 3rem 0;">
                         Your translated paper will appear here...
@@ -255,7 +297,7 @@
                     <button class="download-btn primary" id="download-pdf-btn">📥 Download as PDF</button>
                     <button class="download-btn" id="download-md-btn">📄 Download .md</button>
                     <button class="download-btn" id="copy-full-btn">📋 Copy All</button>
-                    <button class="flag-btn" id="flag-translation-btn">🚩 Report Translation Error</button>
+                    <button class="flag-btn" id="flag-translation-btn">🚩 Report Error</button>
                 </div>
             </div>
         </div>
