@@ -40,9 +40,9 @@ Translate ONLY the specific English chunk provided below into **{language_name}*
 2. **Output in Markdown format** with proper heading hierarchy (# for title, ## for sections, ### for subsections).
 3. **DO NOT translate**: author names, affiliations, institution names, URLs, DOIs, email addresses, reference citations, mathematical equations, code, and figure/table numbers. KEEP NAMES IN ENGLISH.
 4. **DO translate**: title, abstract, all body text, section headings, figure captions, table captions, and conclusion.
-5. **Maintain academic register**: Use formal, scholarly language appropriate for the target language.
+5. **Maintain strict academic register**: Use highly formal, scholarly language appropriate for the target language. Do NOT use colloquialisms or conversational phrasing (e.g. avoid phrases like "হিমশিম খায়"; use formal equivalents like "কঠিন পরিস্থিতির সম্মুখীন হয়" or "সংগ্রাম করে" instead).
 6. **Preserve line breaks exactly**: If authors and affiliations are on multiple lines, keep them on exactly the same lines with the exact same superscripts/asterisks (e.g., `Author1*, Author2`).
-7. **Technical accuracy**: Scientific claims, numerical data, and methodological descriptions must be translated with 100% fidelity.
+7. **Technical accuracy**: Scientific claims, numerical data, and methodological descriptions must be translated with 100% fidelity. Avoid literal transliteration for conceptual metaphors (like "needle-in-a-haystack") unless it is the standard academic convention.
 8. **ZERO PARAPHRASING & ZERO SUMMARIZATION**: Do not add extra filler. Do not invent headings. Do NOT summarize the paper. If the input is just a Title and Authors, translate ONLY the Title and Authors. Do not hallucinate the abstract or introduction.
 
 {glossary_prompt}
@@ -148,6 +148,12 @@ async def _get_llm_response(
                 )
                 # Brief pause to avoid 30 RPM burst limit on Gemma models
                 await asyncio.sleep(2)
+                
+                # Check for empty response (e.g., safety filters)
+                if not response.parts:
+                    err_txt = str(response.candidates[0].finish_reason) if response.candidates else "Unknown Safety Filter"
+                    raise ValueError(f"Content blocked by safety filters. Finish Reason: {err_txt}")
+                    
                 return response.text
             except asyncio.TimeoutError:
                 last_exception = Exception("Google API call timed out after 180s. This may be due to heavy server load or rate_limit.")
@@ -156,6 +162,12 @@ async def _get_llm_response(
             except Exception as e:
                 last_exception = e
                 err_msg = str(e).lower()
+                
+                # Handle Google Gemini "Recitation" / Copyright block (Finish Reason 4)
+                if "finish_reason" in err_msg and ("4" in err_msg or "reciting" in err_msg):
+                    logger.warning("Gemini API blocked output due to Copyright/Recitation filters. Using original text as fallback.")
+                    return f"\n\n> [!WARNING] **Translation Blocked**  \n> Google blocked the translation of this section because it resembles its copyrighted training data (Recitation Filter). Showing original English text instead:\n\n{user_content}\n\n"
+
                 
                 # If we hit an RPM (Requests Per Minute) rate limit / 429 error, pause gracefully and retry
                 if any(k in err_msg for k in ["429", "quota", "exceeded", "rate limit", "ratelimit"]) and attempt < max_retries - 1:
@@ -348,9 +360,15 @@ async def translate_paper(
                     is_numbered_heading = bool(re.match(r'^(\d+(\.\d+)*)\s+[A-Z][A-Za-z\s]+$', clean)) and len(clean) < 100
                     is_all_caps_heading = clean.isupper() and len(clean) > 3 and len(clean) < 50
                     
+                    # Hardcoded semantic checks for critical Quick Mode sections
+                    clean_lower = clean.lower().strip()
+                    is_critical_heading = clean_lower in {"abstract", "introduction", "conclusion", "summary", "references", "acknowledgements"}
+                    if len(clean) < 50 and bool(re.match(r'^(\d+)\s+(introduction|conclusion|summary|background|methodology)', clean_lower)):
+                        is_critical_heading = True
+                    
                     if line_size >= body_size * 1.6:
                         md_lines.append(f"# {clean}")
-                    elif line_size >= body_size * 1.3 or (is_bold and line_size >= body_size * 1.1) or is_numbered_heading:
+                    elif line_size >= body_size * 1.3 or (is_bold and line_size >= body_size * 1.1) or is_numbered_heading or is_critical_heading:
                         md_lines.append(f"## {clean}")
                     elif (is_bold and line_size >= body_size * 0.95 and len(clean) < 80) or is_all_caps_heading:
                         md_lines.append(f"### {clean}")

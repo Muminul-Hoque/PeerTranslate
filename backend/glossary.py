@@ -98,7 +98,10 @@ def build_glossary_prompt(terms: Dict[str, str]) -> str:
 
     lines.append(
         "\nIf you encounter any of these terms in the source text, "
-        "you MUST use the exact translation provided above."
+        "you MUST use the exact translation provided above. "
+        "HOWEVER, if the provided translation includes the English term in parentheses (e.g. 'শব্দ (word)'), "
+        "ONLY include the parentheses on the FIRST occurrence in your translation to introduce the term. "
+        "For all subsequent uses, drop the parentheses and use ONLY the translated portion."
     )
 
     return "\n".join(lines)
