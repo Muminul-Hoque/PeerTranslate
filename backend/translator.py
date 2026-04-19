@@ -135,7 +135,7 @@ async def _get_llm_response(
         last_exception = None
         for attempt in range(max_retries):
             try:
-                # 60-second hard timeout per API call — prevents infinite hangs
+                # 180-second hard timeout per API call — prevents infinite hangs and allows generation of larger chunks
                 response = await asyncio.wait_for(
                     model.generate_content_async(
                         [full_prompt],
@@ -144,23 +144,23 @@ async def _get_llm_response(
                             max_output_tokens=65536,
                         ),
                     ),
-                    timeout=60.0
+                    timeout=180.0
                 )
                 # Brief pause to avoid 30 RPM burst limit on Gemma models
                 await asyncio.sleep(2)
                 return response.text
             except asyncio.TimeoutError:
-                last_exception = Exception("Google API call timed out after 60s")
+                last_exception = Exception("Google API call timed out after 180s. This may be due to heavy server load or rate_limit.")
                 logger.warning(f"Google API timed out. Attempt {attempt+1}/{max_retries}")
-                await asyncio.sleep(3)
+                await asyncio.sleep(5)
             except Exception as e:
                 last_exception = e
                 err_msg = str(e).lower()
                 
                 # If we hit an RPM (Requests Per Minute) rate limit / 429 error, pause gracefully and retry
                 if any(k in err_msg for k in ["429", "quota", "exceeded", "rate limit", "ratelimit"]) and attempt < max_retries - 1:
-                    logger.warning(f"Hit Google API quota/rate limit. Pausing 15s to reset RPM... (Attempt {attempt+1}/{max_retries})")
-                    await asyncio.sleep(15.0)
+                    logger.warning(f"Hit Google API quota/rate limit. Pausing 20s to reset RPM... (Attempt {attempt+1}/{max_retries})")
+                    await asyncio.sleep(20.0)
                     continue
                     
                 # Fast-exit on terminal hard errors (like 404 Model Not Found or invalid keys)
@@ -190,19 +190,26 @@ async def _get_llm_response(
 
         for attempt in range(max_retries):
             try:
-                response = await client.chat.completions.create(
-                    model=model_name,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_content}
-                    ],
-                    temperature=temperature
+                response = await asyncio.wait_for(
+                    client.chat.completions.create(
+                        model=model_name,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_content}
+                        ],
+                        temperature=temperature
+                    ),
+                    timeout=180.0
                 )
                 return response.choices[0].message.content
+            except asyncio.TimeoutError:
+                last_exception = Exception(f"API call to {provider} timed out after 180s. Possible rate_limit or server overload.")
+                logger.warning(f"{provider} API timed out. Attempt {attempt+1}/{max_retries}")
+                await asyncio.sleep(5)
             except openai.RateLimitError as e:
                 last_exception = e
                 wait_time = (attempt + 1) * 5 # Wait 5s, 10s...
-                logger.warning(f"Rate limited by {provider} (429). Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                logger.warning(f"Rate limited by {provider} (429/rate_limit). Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
                 await asyncio.sleep(wait_time)
             except Exception as e:
                 # Immediate fail for non-429 errors
