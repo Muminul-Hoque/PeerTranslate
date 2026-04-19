@@ -290,28 +290,75 @@ async def translate_paper(
     yield {"type": "status", "data": "📄 Initializing PDF processing engine..."}
     
     # ═══════════════════════════════════════════════════════════════
-    # STEP 1: FAST NATIVE MARKDOWN EXTRACTION (PyMuPDF4LLM)
-    #   Falls back to basic PyMuPDF if pymupdf4llm crashes (OOM on
-    #   Render's 512 MB free tier due to onnxruntime / layout engine)
+    # STEP 1: LIGHTWEIGHT TEXT EXTRACTION (PyMuPDF / fitz)
+    #   Uses zero heavy dependencies — runs on 512 MB free tier.
+    #   Reconstructs Markdown headings via font-size heuristics.
     # ═══════════════════════════════════════════════════════════════
-    yield {"type": "status", "data": "📥 Extracting structural Markdown (PyMuPDF4LLM)..."}
+    yield {"type": "status", "data": "📥 Extracting text with PyMuPDF..."}
     original_english_text = ""
     try:
-        import pymupdf4llm
-        original_english_text = pymupdf4llm.to_markdown(tmp_path, show_progress=False)
-        yield {"type": "status", "data": "✅ Native Markdown extraction complete."}
-    except Exception as extract_err:
-        logger.warning(f"PyMuPDF4LLM failed ({extract_err}). Falling back to basic PyMuPDF...")
-        yield {"type": "status", "data": "⚠️ Advanced extractor unavailable. Using basic PyMuPDF fallback..."}
-        try:
-            import fitz
-            doc = fitz.open(tmp_path)
-            for page in doc:
-                original_english_text += page.get_text("text") + "\n\n"
-            doc.close()
-            yield {"type": "status", "data": "✅ Basic text extraction complete."}
-        except Exception as fitz_err:
-            logger.error(f"Basic PyMuPDF extraction also failed: {fitz_err}")
+        import fitz
+        doc = fitz.open(tmp_path)
+        
+        # Collect all font sizes to detect headings via relative sizing
+        all_sizes = []
+        page_blocks = []
+        for page in doc:
+            blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
+            page_blocks.append(blocks)
+            for b in blocks:
+                if b["type"] == 0:  # text block
+                    for line in b["lines"]:
+                        for span in line["spans"]:
+                            if span["text"].strip():
+                                all_sizes.append(round(span["size"], 1))
+        
+        # Determine body font size (most common) and heading thresholds
+        if all_sizes:
+            from collections import Counter
+            size_counts = Counter(all_sizes)
+            body_size = size_counts.most_common(1)[0][0]
+        else:
+            body_size = 10.0
+        
+        # Build markdown from font-size analysis
+        md_lines = []
+        for blocks in page_blocks:
+            for b in blocks:
+                if b["type"] != 0:
+                    continue
+                for line in b["lines"]:
+                    line_text = ""
+                    line_size = 0
+                    is_bold = False
+                    for span in line["spans"]:
+                        text = span["text"]
+                        line_text += text
+                        line_size = max(line_size, span["size"])
+                        if "bold" in span["font"].lower():
+                            is_bold = True
+                    
+                    clean = line_text.strip()
+                    if not clean:
+                        md_lines.append("")
+                        continue
+                    
+                    # Classify by relative font size
+                    if line_size >= body_size * 1.6:
+                        md_lines.append(f"# {clean}")
+                    elif line_size >= body_size * 1.3 or (is_bold and line_size >= body_size * 1.1):
+                        md_lines.append(f"## {clean}")
+                    elif is_bold and line_size >= body_size * 0.95 and len(clean) < 80:
+                        md_lines.append(f"### {clean}")
+                    else:
+                        md_lines.append(clean)
+            md_lines.append("")  # page break
+        
+        doc.close()
+        original_english_text = "\n".join(md_lines)
+        yield {"type": "status", "data": "✅ Text extraction complete."}
+    except Exception as fitz_err:
+        logger.error(f"PyMuPDF extraction failed: {fitz_err}")
 
     if not original_english_text.strip():
         yield {"type": "error", "data": "❌ Could not extract any text from the PDF."}
