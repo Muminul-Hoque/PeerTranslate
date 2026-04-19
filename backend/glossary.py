@@ -100,7 +100,8 @@ def build_glossary_prompt(terms: Dict[str, str]) -> str:
         "\nIf you encounter any of these terms in the source text, "
         "you MUST use the exact translation provided above. "
         "HOWEVER, if the provided translation includes the English term in parentheses (e.g. 'শব্দ (word)'), "
-        "ONLY include the parentheses on the FIRST occurrence in your translation to introduce the term. "
+        "ONLY include the parentheses on the FIRST occurrence in the body text to introduce the term. "
+        "Do NOT include the parentheses in the paper Title or any Section Headings. "
         "For all subsequent uses, drop the parentheses and use ONLY the translated portion."
     )
 

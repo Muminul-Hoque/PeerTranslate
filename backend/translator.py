@@ -440,6 +440,31 @@ async def translate_paper(
         section_title = section["title"]
         section_index_txt = f"{i+1}/{len(sections)}"
         
+        # --- Bypasses ---
+        # 1. References Bypass (Never translate reference citations to maintain academic integrity)
+        if any(ref_word in section_title.lower() for ref_word in ["references", "bibliography"]):
+             yield {"type": "status", "data": f"📚 [{section_index_txt}] Bypassed: {section_title} (Maintained in original language)."}
+             best_chunk = f"## {section_title}\n\n{section['content']}"
+             final_score_obj = SectionScore(
+                 section_title=section_title, 
+                 original_text=section["content"][:100], 
+                 back_translated_text="-reference-bypass-", 
+                 similarity_score=1.0,
+                 confidence_label="skipped"
+             )
+             full_translated_markdown += best_chunk + "\n\n"
+             section_scores.append(final_score_obj)
+             
+             yield {"type": "translation_chunk", "data": best_chunk + "\n\n"}
+             yield {
+                 "type": "verification_section",
+                 "data": {
+                     "title": section_title, "score": 100.0, "label": "skipped", "flagged_terms": [],
+                     "metrics": {"current_index": i + 1, "total_sections": len(sections), "running_avg": round((sum(s.similarity_score for s in section_scores) / len(section_scores)) * 100, 1)}
+                 }
+             }
+             continue
+        
         # --- Pass 1: Translate ---
         yield {"type": "status", "data": f"⏳ [{section_index_txt}] Translating: {section_title}..."}
         section_content = f"## {section_title}\n\n{section['content']}"
