@@ -107,8 +107,17 @@
             <!-- URL Input (URL Tab) -->
             <div class="tab-content" id="tab-url">
                 <div class="url-input-container">
-                    <input type="url" id="url-input" class="url-input" placeholder="https://example.com/paper.pdf" autocomplete="off">
-                    <div class="drop-zone-hint mt-2">Paste a direct link to a PDF or a Google Drive link</div>
+                    <input type="url" id="url-input" class="url-input" placeholder="https://arxiv.org/pdf/2307.03172.pdf" autocomplete="off">
+                    <div class="drop-zone-hint mt-2">Paste a <strong>direct PDF link</strong> (the URL should end in <code>.pdf</code>)</div>
+                    
+                    <div style="margin-top: 1rem; padding: 1rem; background: rgba(0,200,150,0.05); border: 1px solid rgba(0,200,150,0.15); border-radius: var(--radius-sm);">
+                        <div style="font-size: 0.85rem; margin-bottom: 0.5rem; font-weight: 600; color: var(--accent-cyan);">✅ Supported Sources (Paste URL directly)</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">ArXiv · PubMed Central · bioRxiv · any open-access .pdf link</div>
+                    </div>
+                    <div style="margin-top: 0.5rem; padding: 1rem; background: rgba(244,63,94,0.05); border: 1px solid rgba(244,63,94,0.15); border-radius: var(--radius-sm);">
+                        <div style="font-size: 0.85rem; margin-bottom: 0.5rem; font-weight: 600; color: var(--accent-rose);">⚠️ Not Supported via URL</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">ScienceDirect · IEEE Xplore · Springer · Wiley — these publishers block automated downloads.<br>👉 <strong>Download the PDF to your device first</strong>, then use the <em>Upload File</em> tab.</div>
+                    </div>
                 </div>
             </div>
 

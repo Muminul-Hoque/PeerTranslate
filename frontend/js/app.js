@@ -420,8 +420,30 @@ async function startTranslation() {
             }
         }
     } catch (error) {
-        addStatusEntry(`❌ Error: ${error.message}`);
         console.error('Translation error:', error);
+        
+        // Show a clear, user-friendly error in the status log
+        let userMessage = error.message;
+        
+        // Detect common publisher blocks and explain clearly
+        if (userMessage.includes('403') || userMessage.includes('Forbidden')) {
+            userMessage = '🔒 This publisher blocks automated downloads. Please download the PDF file manually to your computer, then click the "Upload File" tab to translate it.';
+        } else if (userMessage.includes('HTML page') || userMessage.includes('not a PDF')) {
+            userMessage = '📄 This URL points to a webpage, not a PDF file. Please find the direct PDF download link (usually ending in .pdf), or download the PDF and use the "Upload File" tab.';
+        } else if (userMessage.includes('Failed to fetch') || userMessage.includes('NetworkError')) {
+            userMessage = '🌐 Network error — Could not reach the server. Please check your internet connection and try again.';
+        }
+        
+        addStatusEntry(`❌ Error: ${userMessage}`);
+        
+        // Also show in the output area so users don't miss it
+        outputBody.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <div style="font-size: 2rem; margin-bottom: 1rem;">⚠️</div>
+                <div style="color: var(--accent-rose); font-weight: 600; margin-bottom: 0.5rem;">Translation Failed</div>
+                <p style="color: var(--text-secondary); max-width: 500px; margin: 0 auto; line-height: 1.6;">${userMessage}</p>
+            </div>
+        `;
     } finally {
         isTranslating = false;
         translateBtn.classList.remove('loading');

@@ -260,12 +260,50 @@ async def translate(
     if url:
         if not url.startswith(("http://", "https://")):
             raise HTTPException(status_code=400, detail="Invalid URL format.")
+        
+        # Browser-like headers to avoid 403 from publisher CDNs
+        download_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Accept": "application/pdf,*/*",
+        }
+        
         try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=30.0, headers=download_headers) as client:
                 response = await client.get(url)
                 response.raise_for_status()
+                content_type = response.headers.get("content-type", "")
                 pdf_content = response.content
                 filename = url.split("/")[-1] or "downloaded.pdf"
+                
+                # Detect if the server returned HTML instead of a PDF
+                if "text/html" in content_type and not pdf_content.startswith(b"%PDF"):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "This URL returned an HTML page, not a PDF file. "
+                            "Publishers like ScienceDirect, IEEE, and Springer serve article viewer pages at this URL. "
+                            "Please use the direct PDF download link instead (usually ending in .pdf), "
+                            "or download the PDF to your device and use the 'Upload File' tab."
+                        ),
+                    )
+        except HTTPException:
+            raise  # Re-raise our custom errors
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to download PDF: {e}")
+            status = e.response.status_code
+            if status == 403:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "403 Forbidden — This publisher blocks automated downloads. "
+                        "Please download the PDF manually to your device, "
+                        "then use the 'Upload File' tab to translate it."
+                    ),
+                )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to download PDF from URL (HTTP {status}): {str(e)}",
+            )
         except Exception as e:
             logger.error(f"Failed to download PDF: {e}")
             raise HTTPException(
