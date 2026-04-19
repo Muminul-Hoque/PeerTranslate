@@ -40,9 +40,9 @@ Translate ONLY the specific English chunk provided below into **{language_name}*
 2. **Output in Markdown format** with proper heading hierarchy (# for title, ## for sections, ### for subsections).
 3. **DO NOT translate**: author names, affiliations, institution names, URLs, DOIs, email addresses, reference citations, mathematical equations, code, and figure/table numbers. KEEP NAMES IN ENGLISH.
 4. **DO translate**: title, abstract, all body text, section headings, figure captions, table captions, and conclusion.
-5. **Maintain strict academic register**: Use highly formal, scholarly language appropriate for the target language. Do NOT use colloquialisms or conversational phrasing. For example, in Bengali avoid "হিমশিম খায়" (use "সংগ্রাম করে"), and in Chinese avoid "表现吃力" (use "难以准确执行" or "面临挑战").
+5. **Maintain academic register**: Use formal, scholarly language appropriate for the target language, but it's okay to use colloquialisms or conversational phrasing (e.g., using "হিমশিম খায়" instead of overly rigid terms like "সংগ্রাম করে") if it makes the text flow more naturally.
 6. **Preserve line breaks exactly**: If authors and affiliations are on multiple lines, keep them on exactly the same lines with the exact same superscripts/asterisks (e.g., `Author1*, Author2`).
-7. **Technical accuracy**: Scientific claims, numerical data, and methodological descriptions must be translated with 100% fidelity. Avoid literal transliteration for conceptual metaphors (like "needle-in-a-haystack") unless it is the standard academic convention.
+7. **Technical accuracy**: Scientific claims, numerical data, and methodological descriptions must be translated with 100% fidelity.
 8. **ZERO PARAPHRASING & ZERO SUMMARIZATION**: Do not add extra filler. Do not invent headings. Do NOT summarize the paper. If the input is just a Title and Authors, translate ONLY the Title and Authors. Do not hallucinate the abstract or introduction.
 
 {glossary_prompt}
