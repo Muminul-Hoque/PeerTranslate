@@ -434,7 +434,12 @@ async function startTranslation() {
     // Show results section
     resultsSection.classList.add('visible');
     statusLog.innerHTML = '';
-    outputBody.innerHTML = '';
+    outputBody.innerHTML = `
+        <div id="translation-loading-state" style="padding:3rem 2rem;text-align:center;color:var(--text-muted);">
+            <div style="font-size:2rem;margin-bottom:1rem;animation:spin 2s linear infinite;display:inline-block;">⚙️</div>
+            <div style="font-weight:600;margin-bottom:0.5rem;">Translation in progress...</div>
+            <div style="font-size:0.85rem;">The first verified section will appear here shortly.</div>
+        </div>`;
     verificationGrid.innerHTML = '';
     overallScoreBadge.textContent = '—';
     overallScoreBadge.className = 'score-badge';
@@ -650,16 +655,11 @@ function addStatusEntry(text) {
 }
 
 // ── Render Translation ──
-// Sentinel used to detect and skip the initial loading placeholder
-const LOADING_SENTINEL = '⏳';
 function renderTranslation(markdownText) {
-    // If this is just the loading placeholder, show it softly
-    // but don't overwrite a real translation that's already displayed
-    const isLoadingPlaceholder = markdownText.includes(LOADING_SENTINEL) &&
-        markdownText.includes('Translation in Progress');
-    if (isLoadingPlaceholder && rawMarkdown && rawMarkdown.length > 200) {
-        return; // already have real content
-    }
+    // Remove the loading skeleton on first real content
+    const loadingState = document.getElementById('translation-loading-state');
+    if (loadingState) loadingState.remove();
+
     rawMarkdown = markdownText;
     outputBody.dataset.rawMarkdown = markdownText;
     if (typeof marked !== 'undefined') {

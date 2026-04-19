@@ -409,9 +409,6 @@ async def translate_paper(
     section_scores = []
     
     for i, section in enumerate(sections):
-        if i == 0:
-            loading_msg = "> ⏳ **Translation in Progress...**\n> \n> PeerTranslate uses a mathematically rigorous 4-pass verification system. Because you are utilizing the completely **Free Tier API (limited to 15 requests per minute)**, a full paper (20+ sections) requires over 60 discrete AI judgments. \n>\n> *To prevent API Quota errors, the system paces itself safely. Please allow 5 to 10 minutes for full completion.* \n>\n> _The first highly-verified section will appear here shortly..._\n"
-            yield {"type": "translation", "data": loading_msg}
 
         section_title = section["title"]
         section_index_txt = f"{i+1}/{len(sections)}"
