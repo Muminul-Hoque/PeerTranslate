@@ -118,7 +118,9 @@
                 </div>
                 <div style="flex: 1;">
                     <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted);">Target Language</label>
-                    <input type="text" id="lang-input" class="term-input" placeholder="e.g., Bengali (বাংলা)" required style="width: 100%;">
+                    <select id="lang-input" class="term-input" required style="width: 100%;">
+                        <option value="" disabled selected>Loading languages...</option>
+                    </select>
                 </div>
                 <div style="flex: 1;">
                     <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted);">Academic Domain</label>
@@ -184,6 +186,30 @@
         const container = document.getElementById('terms-container');
         const addBtn = document.getElementById('add-term-btn');
         const form = document.getElementById('contribute-form');
+        const langSelect = document.getElementById('lang-input');
+
+        // Load supported languages from API
+        async function loadLanguagesForContribute() {
+            try {
+                const response = await fetch('/api/languages');
+                const data = await response.json();
+                
+                langSelect.innerHTML = '<option value="" disabled selected>Select Target Language...</option>';
+                
+                data.languages.forEach(lang => {
+                    const opt = document.createElement('option');
+                    opt.value = lang.code;
+                    // Provide the code so the backend processes 'hi' or 'bn' properly
+                    opt.textContent = `${lang.name} (${lang.code})`;
+                    langSelect.appendChild(opt);
+                });
+            } catch (err) {
+                console.error("Failed to load languages:", err);
+                langSelect.innerHTML = '<option value="" disabled selected>Error loading languages</option>';
+            }
+        }
+        
+        loadLanguagesForContribute();
 
         function addRow() {
             const row = document.createElement('div');
