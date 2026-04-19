@@ -133,6 +133,12 @@
                 hamburger.addEventListener('click', () => {
                     navLinks.classList.toggle('mobile-open');
                 });
+                const links = navLinks.querySelectorAll('a');
+                links.forEach(link => {
+                    link.addEventListener('click', () => {
+                        navLinks.classList.remove('mobile-open');
+                    });
+                });
             }
         });
     </script>

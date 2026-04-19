@@ -1070,6 +1070,7 @@ body::before {
 /* ── Mobile Hamburger Menu ── */
 .nav-hamburger {
     display: none;
+    position: relative;
     background: none;
     border: none;
     color: var(--text-primary);

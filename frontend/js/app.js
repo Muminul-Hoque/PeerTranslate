@@ -228,6 +228,14 @@ function setupEventListeners() {
         hamburger.addEventListener('click', () => {
             navLinks.classList.toggle('mobile-open');
         });
+        
+        // Close menu when clicking a link
+        const links = navLinks.querySelectorAll('a');
+        links.forEach(link => {
+            link.addEventListener('click', () => {
+                navLinks.classList.remove('mobile-open');
+            });
+        });
     }
 
     fileRemoveBtn.addEventListener('click', (e) => {
