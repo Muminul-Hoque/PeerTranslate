@@ -4,7 +4,7 @@
 
 ### Translate Research Papers into Your Own Language — With Verified Accuracy
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey?style=flat-square)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Powered by Gemini](https://img.shields.io/badge/AI-Google%20Gemini-orange?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev/)
 [![Contributions Welcome](https://img.shields.io/badge/Contributions-Welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
@@ -39,7 +39,7 @@ PeerTranslate uses a **4-pass Verify Loop** to deliver accurate, verified transl
 | Domain glossaries | ✅ Community-curated, term-locked | ❌ Generic translation |
 | Accuracy scoring | ✅ Per-section confidence scores | ❌ No measurement |
 | Low-resource languages | ✅ Bengali-first, any language welcome | ❌ Poor support |
-| Open source | ✅ MIT License | ⚠️ Varies |
+| Open source | ✅ CC BY-NC 4.0 | ⚠️ Varies |
 
 ---
 
@@ -138,7 +138,7 @@ PeerTranslate/
 ├── CITATION.cff              # Academic citation metadata
 ├── CONTRIBUTING.md           # Contributor guide
 ├── CODE_OF_CONDUCT.md        # Community standards
-└── LICENSE                   # MIT License
+└── LICENSE                   # CC BY-NC 4.0 License
 ```
 
 ---
@@ -167,7 +167,7 @@ If PeerTranslate helps your research, please cite it:
     author       = {Muhammed Muminul Hoque},
     year         = {2026},
     url          = {https://github.com/muminul-hoque/PeerTranslate},
-    license      = {MIT}
+    license      = {CC BY-NC 4.0}
 }
 ```
 
@@ -175,7 +175,7 @@ If PeerTranslate helps your research, please cite it:
 
 ## 📜 License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [CC BY-NC 4.0 License](LICENSE).
 
 ---
 
