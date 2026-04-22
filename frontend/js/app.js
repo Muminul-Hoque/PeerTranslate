@@ -4,6 +4,7 @@
 
 // ── State ──
 let selectedFile = null;
+let lastTranslatedFile = null;  // Store the original PDF for layout-preserved export
 let isTranslating = false;
 let rawMarkdown = '';
 let originalMarkdown = '';
@@ -460,6 +461,13 @@ async function startTranslation() {
     } else {
         formData.append('file', selectedFile);
     }
+    // Store the file/blob for layout-preserved PDF export later
+    if (isUrlMode) {
+        // We'll re-download at export time via URL — store the URL
+        lastTranslatedFile = { type: 'url', url: urlInput.value.trim() };
+    } else {
+        lastTranslatedFile = { type: 'file', file: selectedFile };
+    }
     formData.append('language', languageSelect.value);
     
     // Append BYOK & Settings
@@ -818,9 +826,70 @@ function downloadMarkdownFile() {
     showNotification('Downloaded!', 'success');
 }
 
-// ── Download as PDF (printer dialog) ──
-function downloadAsPDF() {
-    window.print();
+// ── Download as Layout-Preserved PDF ──
+async function downloadAsPDF() {
+    const md = rawMarkdown || outputBody.dataset.rawMarkdown;
+    if (!md) { showNotification('No translation to export.', 'error'); return; }
+
+    // If we don't have the original file, fall back to browser print
+    if (!lastTranslatedFile) {
+        window.print();
+        return;
+    }
+
+    const pdfBtn = document.getElementById('download-pdf-btn');
+    if (pdfBtn) {
+        pdfBtn.disabled = true;
+        pdfBtn.textContent = '⏳ Generating PDF...';
+    }
+
+    try {
+        const formData = new FormData();
+
+        if (lastTranslatedFile.type === 'file') {
+            formData.append('file', lastTranslatedFile.file);
+        } else if (lastTranslatedFile.type === 'url') {
+            // Re-download the PDF from URL for the export
+            const resp = await fetch(lastTranslatedFile.url);
+            const blob = await resp.blob();
+            formData.append('file', blob, 'paper.pdf');
+        }
+
+        formData.append('translated_markdown', md);
+        formData.append('original_english', originalMarkdown || '');
+        formData.append('language', languageSelect.value || 'bn');
+        formData.append('filename', `peertranslate_${languageSelect.value || 'translation'}`);
+
+        const response = await fetch('/api/export/pdf-preserved', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText);
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `peertranslate_${languageSelect.value || 'translation'}_preserved.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showNotification('Layout-preserved PDF downloaded!', 'success');
+    } catch (e) {
+        console.error('PDF export failed:', e);
+        showNotification('PDF export failed. Falling back to print dialog.', 'error');
+        window.print();
+    } finally {
+        if (pdfBtn) {
+            pdfBtn.disabled = false;
+            pdfBtn.textContent = '📥 Download as PDF';
+        }
+    }
 }
 
 // ── Download as DOCX ──

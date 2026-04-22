@@ -490,6 +490,42 @@ async def export_latex(data: ExportRequest):
         raise HTTPException(status_code=500, detail=f"LaTeX export failed: {str(e)}")
 
 
+@app.post("/api/export/pdf-preserved")
+async def export_pdf_preserved(
+    file: UploadFile = File(...),
+    translated_markdown: str = Form(...),
+    original_english: str = Form(""),
+    language: str = Form("bn"),
+    filename: str = Form("peertranslate_output"),
+):
+    """
+    Generate a layout-preserved PDF where the original text is replaced
+    with translations at the same coordinates, preserving figures and equations.
+    """
+    from backend.pdf_renderer import render_preserved_pdf
+    from fastapi.responses import Response
+
+    pdf_content = await file.read()
+    if not pdf_content.startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="Invalid PDF file.")
+
+    try:
+        result_bytes = render_preserved_pdf(
+            original_pdf_bytes=pdf_content,
+            original_english_text=original_english,
+            translated_markdown=translated_markdown,
+            target_language=language,
+        )
+        return Response(
+            content=result_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}_translated.pdf"'}
+        )
+    except Exception as e:
+        logger.error(f"PDF-preserved export failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Layout-preserved PDF export failed: {str(e)}")
+
+
 # ──────────────────────────────────────────────
 # DOI → Open-Access PDF Resolver (Unpaywall)
 # ──────────────────────────────────────────────

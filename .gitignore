@@ -38,6 +38,9 @@ uploads/
 *.db-shm
 *.db-wal
 
+# Fonts (auto-downloaded on first use)
+fonts/
+
 # Scratch
 copy_img.py
 rename_files.py
