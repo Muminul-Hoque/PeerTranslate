@@ -38,13 +38,14 @@ Translate ONLY the specific English chunk provided below into **{language_name}*
 ## CRITICAL RULES
 1. **Preserve the ENTIRE structure**: all headings, subheadings, bullet points, numbered lists, tables, equations, and references.
 2. **Output in Markdown format** with proper heading hierarchy (# for title, ## for sections, ### for subsections).
-3. **DO NOT translate**: author names, affiliations, institution names, URLs, DOIs, email addresses, reference citations, mathematical equations, code, and figure/table numbers. KEEP NAMES IN ENGLISH.
+3. **DO NOT translate**: author names, affiliations, institution names, URLs, DOIs, email addresses, reference citations (including "et al."), mathematical equations, code, and figure/table numbers. KEEP NAMES IN ENGLISH.
 4. **DO translate**: title, abstract, all body text, section headings, figure captions, table captions, and conclusion.
 5. **Maintain academic register**: Use formal, scholarly language appropriate for the target language, but it's okay to use colloquialisms or conversational phrasing (e.g., using "হিমশিম খায়" instead of overly rigid terms like "সংগ্রাম করে") if it makes the text flow more naturally.
 6. **Preserve line breaks exactly**: If authors and affiliations are on multiple lines, keep them on exactly the same lines with the exact same superscripts/asterisks (e.g., `Author1*, Author2`).
 7. **Technical accuracy**: Scientific claims, numerical data, and methodological descriptions must be translated with 100% fidelity.
 8. **ZERO PARAPHRASING & ZERO SUMMARIZATION**: Do not add extra filler. Do not invent headings. Do NOT summarize the paper. If the input is just a Title and Authors, translate ONLY the Title and Authors. Do not hallucinate the abstract or introduction.
 9. **NO CHUNK ARTIFACTS**: You are translating chunks of a larger document. Do NOT output any chunk metadata, page numbers, or artifact titles like '(Part 3)', '(অংশ ২)', or '(continued)'. Output ONLY the clean, translated academic text.
+10. **NUMERAL CONSISTENCY**: IMPORTANT: Keep all section numbers, figures, and numerical data as Arabic numerals (1, 2, 3...). Do NOT translate numerals into local scripts (e.g., do not use ১, ২, ৩).
 
 {glossary_prompt}
 
@@ -106,7 +107,8 @@ You previously translated a section of a research paper into {language_name}, bu
 3. Maintain the precise academic tone of the English original.
 4. **MISSION: HIGH-FIDELITY**: DO NOT cross-reference outside knowledge. ONLY use the original English text provided in this prompt.
 5. **ZERO ADDITIONS**: Do not add extra explanations or sections.
-4. ONLY output the corrected translation.
+6. **NUMERAL CONSISTENCY**: Keep all section numbers, figures, and numerical data as Arabic numerals (1, 2, 3...). Do NOT translate numerals into local scripts.
+7. ONLY output the corrected translation.
 
 {glossary_prompt}
 
@@ -265,41 +267,7 @@ async def translate_paper(
     glossary_prompt = build_glossary_prompt(glossary_terms)
     yield {"type": "status", "data": f"✅ Loaded {len(glossary_terms)} domain-specific terms"}
 
-    # 1.5 Check Cache First
-    pdf_hash = get_hash(pdf_content, target_language)
-    cached_data = get_cached_translation(pdf_content, target_language, settings.similarity_threshold)
-    
-    yield {"type": "cache_info", "data": {"hash_key": pdf_hash, "from_cache": False}}
-    
-    if cached_data:
-        yield {"type": "status", "data": "🌟 Found verified translation in Community Cache!"}
-        yield {"type": "cache_info", "data": {"hash_key": pdf_hash, "from_cache": True}}
-        
-        # We simulate the verification event from the score
-        score = cached_data["verification_score"]
-        if score >= 0.98:
-            label = "excellent"
-        elif score >= 0.96:
-            label = "good"
-        elif score >= 0.70:
-            label = "needs_review"
-        else:
-            label = "low_confidence"
-            
-        yield {
-            "type": "verification",
-            "data": {
-                "overall_score": f"{score * 100:.1f}%",
-                "overall_label": label,
-                "flagged_sections": 0,
-                "total_sections": 0,
-                "section_scores": []
-            }
-        }
-        
-        yield {"type": "translation", "data": cached_data["translated_markdown"]}
-        yield {"type": "complete", "data": "Translation retrieved from community cache."}
-        return
+
 
     # 2. Save PDF to temp file & extract figures
     yield {"type": "status", "data": "📄 Processing PDF document..."}
@@ -429,6 +397,43 @@ async def translate_paper(
         yield {"type": "error", "data": "❌ Could not extract any text from the PDF."}
         return
 
+    # 1.5 Check Cache First (Now hashing the extracted text instead of raw PDF bytes)
+    text_bytes = original_english_text.encode("utf-8")
+    pdf_hash = get_hash(text_bytes, target_language)
+    cached_data = get_cached_translation(text_bytes, target_language, settings.similarity_threshold)
+    
+    yield {"type": "cache_info", "data": {"hash_key": pdf_hash, "from_cache": False}}
+    
+    if cached_data:
+        yield {"type": "status", "data": "🌟 Found verified translation in Community Cache!"}
+        yield {"type": "cache_info", "data": {"hash_key": pdf_hash, "from_cache": True}}
+        
+        # We simulate the verification event from the score
+        score = cached_data["verification_score"]
+        if score >= 0.98:
+            label = "excellent"
+        elif score >= 0.96:
+            label = "good"
+        elif score >= 0.70:
+            label = "needs_review"
+        else:
+            label = "low_confidence"
+            
+        yield {
+            "type": "verification",
+            "data": {
+                "overall_score": f"{score * 100:.1f}%",
+                "overall_label": label,
+                "flagged_sections": 0,
+                "total_sections": 0,
+                "section_scores": []
+            }
+        }
+        
+        yield {"type": "translation", "data": cached_data["translated_markdown"]}
+        yield {"type": "complete", "data": "Translation retrieved from community cache."}
+        return
+
     # ═══════════════════════════════════════════════════════════════
     # STEP 2: FIGURE EXTRACTION (Non-blocking heuristic)
     # ═══════════════════════════════════════════════════════════════
@@ -527,6 +532,9 @@ async def translate_paper(
             
             if not translated_chunk:
                 raise Exception("Model returned empty translation.")
+                
+            # Normalize mixed numerals (convert Bengali digits to Arabic)
+            translated_chunk = translated_chunk.translate(str.maketrans('০১২৩৪৫৬৭৮৯', '0123456789'))
 
             # --- Pass 2 & 3: Verification with Recursive Loop (Pass 4) ---
             # Bypass rigorous verification for very short sections (like Titles, Authors, strict equations)
@@ -644,7 +652,7 @@ async def translate_paper(
                 )
                 
                 if refined_chunk:
-                    translated_chunk = refined_chunk
+                    translated_chunk = refined_chunk.translate(str.maketrans('০১২৩৪৫৬৭৮৯', '0123456789'))
                 else:
                     break # Cannot refine if model gives empty response
 
@@ -687,11 +695,61 @@ async def translate_paper(
                 yield {"type": "translation_chunk", "data": f"\n\n> [!ERROR] {error_body}\n\n"}
                 return  # Stop the entire pipeline, no need to fail every remaining section
             
+            # Dynamic Chunking Fallback: If section is very large, split it and retry
+            if len(section['content']) > 1500 and "\n\n" in section['content']:
+                yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Chunk failed. Splitting in half and retrying..."}
+                paragraphs = section["content"].split("\n\n")
+                mid = len(paragraphs) // 2
+                half1_content = "\n\n".join(paragraphs[:mid])
+                half2_content = "\n\n".join(paragraphs[mid:])
+                
+                try:
+                    h1 = await _get_llm_response(translation_prompt, f"## {section_title} (Part 1)\n\n{half1_content}", user_provider, api_key, user_model, settings)
+                    h1 = h1.translate(str.maketrans('০১২৩৪৫৬৭৮৯', '0123456789'))
+                except Exception as e1:
+                    logger.error(f"Half 1 failed: {e1}")
+                    h1 = f"**[Translation failed for this part. Original text preserved:]**\n\n{half1_content}"
+                    
+                try:
+                    h2 = await _get_llm_response(translation_prompt, f"## {section_title} (Part 2)\n\n{half2_content}", user_provider, api_key, user_model, settings)
+                    h2 = h2.translate(str.maketrans('০১২৩৪৫৬৭৮৯', '0123456789'))
+                except Exception as e2:
+                    logger.error(f"Half 2 failed: {e2}")
+                    h2 = f"**[Translation failed for this part. Original text preserved:]**\n\n{half2_content}"
+                
+                best_chunk = h1 + "\n\n" + h2
+                full_translated_markdown += best_chunk + "\n\n"
+                
+                # Mock a bypassed score for the split section so it doesn't break metrics
+                score_obj = SectionScore(
+                    section_title=section_title, original_text=section["content"][:100],
+                    back_translated_text="-dynamic-split-", similarity_score=0.5, confidence_label="needs_review"
+                )
+                section_scores.append(score_obj)
+                
+                yield {"type": "translation_chunk", "data": best_chunk + "\n\n"}
+                yield {
+                    "type": "verification_section",
+                    "data": {
+                        "title": section_title, "score": 50.0, "label": "needs_review", "flagged_terms": [],
+                        "metrics": {"current_index": i + 1, "total_sections": len(sections), "running_avg": round((sum(s.similarity_score for s in section_scores) / len(section_scores)) * 100, 1)}
+                    }
+                }
+                continue
+
             # Otherwise, it's a transient error — skip and continue
-            error_msg = f"Translation failed for section: {section_title}. Skipping..."
+            error_msg = f"Translation failed for section: {section_title}. Original text preserved."
             yield {"type": "warning", "data": error_msg}
-            full_translated_markdown += f"\n\n> [!WARNING] {error_msg}\n\n"
-            yield {"type": "translation_chunk", "data": f"\n\n> [!WARNING] {error_msg}\n\n"}
+            safe_fallback = f"**[⚠️ Translation Failed for this Section]**\n\n{section_content}"
+            full_translated_markdown += f"\n\n{safe_fallback}\n\n"
+            yield {"type": "translation_chunk", "data": f"\n\n{safe_fallback}\n\n"}
+            
+            # Mock failed score
+            score_obj = SectionScore(
+                section_title=section_title, original_text=section["content"][:100],
+                back_translated_text="-failed-", similarity_score=0.0, confidence_label="low_confidence"
+            )
+            section_scores.append(score_obj)
 
     # Build final report and save to cache
     final_report = VerificationReport(section_scores=section_scores)
@@ -702,7 +760,7 @@ async def translate_paper(
     yield {"type": "translation", "data": full_translated_markdown}
     
     save_translation(
-        pdf_bytes=pdf_content,
+        pdf_bytes=original_english_text.encode("utf-8"),
         language=target_language,
         translated_markdown=full_translated_markdown,
         verification_score=final_report.overall_score,
