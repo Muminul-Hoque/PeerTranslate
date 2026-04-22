@@ -399,7 +399,7 @@ async def translate_paper(
                 is_bold = line_info["bold"]
                 
                 import re
-                is_numbered_heading = bool(re.match(r'^(\d+(\.\d+)*)\s+[A-Z][A-Za-z\s]+$', clean)) and len(clean) < 100
+                is_numbered_heading = bool(re.match(r'^(\d+(\.\d+)*)\s+[A-Z].*$', clean)) and len(clean) < 120
                 is_all_caps_heading = clean.isupper() and len(clean) > 3 and len(clean) < 50
                 
                 # Hardcoded semantic checks for critical Quick Mode sections

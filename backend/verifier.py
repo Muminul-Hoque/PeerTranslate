@@ -168,7 +168,8 @@ def split_into_sections(text: str) -> List[Dict[str, str]]:
     seen_titles = set()
     for line in text.split("\n"):
         stripped = line.strip()
-        if stripped.startswith("#"):
+        # Only split on H1 and H2. H3s (like bolded table cells) remain inside the section block.
+        if stripped.startswith("# ") or stripped.startswith("## "):
             title = stripped.lstrip("#").strip()
             
             # Normalize title for robust deduplication (strip numbers like "1.", "1 ", "1.1")
