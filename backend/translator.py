@@ -137,6 +137,15 @@ async def _get_llm_response(
         for attempt in range(max_retries):
             try:
                 # 180-second hard timeout per API call — prevents infinite hangs and allows generation of larger chunks
+                from google.generativeai.types import HarmCategory, HarmBlockThreshold
+                
+                safety_settings = {
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                }
+                
                 response = await asyncio.wait_for(
                     model.generate_content_async(
                         [full_prompt],
@@ -144,6 +153,7 @@ async def _get_llm_response(
                             temperature=temperature,
                             max_output_tokens=65536,
                         ),
+                        safety_settings=safety_settings,
                     ),
                     timeout=180.0
                 )
@@ -337,44 +347,76 @@ async def translate_paper(
         # Build markdown from font-size analysis
         md_lines = []
         for blocks in page_blocks:
+            # 1. Collect raw lines with styling info
+            raw_lines = []
             for b in blocks:
                 if b["type"] != 0:
                     continue
                 for line in b["lines"]:
                     line_text = ""
-                    line_size = 0
+                    max_size = 0
                     is_bold = False
                     for span in line["spans"]:
-                        text = span["text"]
-                        line_text += text
-                        line_size = max(line_size, span["size"])
+                        line_text += span["text"]
+                        max_size = max(max_size, span["size"])
                         if "bold" in span["font"].lower():
                             is_bold = True
                     
                     clean = line_text.strip()
-                    if not clean:
-                        md_lines.append("")
-                        continue
-                    
-                    # Classify by relative font size or clear regex pattern (e.g., '1 Introduction', 'Abstract')
+                    if clean:
+                        raw_lines.append({"text": clean, "size": max_size, "bold": is_bold})
+                        
+            # 2. Merge standalone numbers with the following line (fixes NIPS/IEEE formatting)
+            merged_lines = []
+            skip_next = False
+            for i, current in enumerate(raw_lines):
+                if skip_next:
+                    skip_next = False
+                    continue
+                
+                # If current line is just a number/decimal and next line starts with a capital letter
+                if i + 1 < len(raw_lines):
+                    next_line = raw_lines[i+1]
                     import re
-                    is_numbered_heading = bool(re.match(r'^(\d+(\.\d+)*)\s+[A-Z][A-Za-z\s]+$', clean)) and len(clean) < 100
-                    is_all_caps_heading = clean.isupper() and len(clean) > 3 and len(clean) < 50
+                    is_standalone_num = bool(re.match(r'^(\d+(\.\d+)*)\.?$', current["text"]))
+                    next_is_capitalized = bool(re.match(r'^[A-Z]', next_line["text"]))
                     
-                    # Hardcoded semantic checks for critical Quick Mode sections
-                    clean_lower = clean.lower().strip()
-                    is_critical_heading = clean_lower in {"abstract", "introduction", "conclusion", "summary", "references", "acknowledgements"}
-                    if len(clean) < 50 and bool(re.match(r'^(\d+)\s+(introduction|conclusion|summary|background|methodology)', clean_lower)):
-                        is_critical_heading = True
+                    if is_standalone_num and next_is_capitalized and len(next_line["text"]) < 80:
+                        merged_lines.append({
+                            "text": f'{current["text"]} {next_line["text"]}',
+                            "size": max(current["size"], next_line["size"]),
+                            "bold": current["bold"] or next_line["bold"]
+                        })
+                        skip_next = True
+                        continue
+                
+                merged_lines.append(current)
+
+            # 3. Apply heading heuristics to merged lines
+            for line_info in merged_lines:
+                clean = line_info["text"]
+                line_size = line_info["size"]
+                is_bold = line_info["bold"]
+                
+                import re
+                is_numbered_heading = bool(re.match(r'^(\d+(\.\d+)*)\s+[A-Z][A-Za-z\s]+$', clean)) and len(clean) < 100
+                is_all_caps_heading = clean.isupper() and len(clean) > 3 and len(clean) < 50
+                
+                # Hardcoded semantic checks for critical Quick Mode sections
+                clean_lower = clean.lower()
+                is_critical_heading = clean_lower in {"abstract", "introduction", "conclusion", "summary", "references", "acknowledgements", "background", "methodology"}
+                if len(clean) < 50 and bool(re.match(r'^(\d+)\s+(introduction|conclusion|summary|background|methodology|experiments|results)', clean_lower)):
+                    is_critical_heading = True
+                
+                if line_size >= body_size * 1.6:
+                    md_lines.append(f"# {clean}")
+                elif line_size >= body_size * 1.3 or (is_bold and line_size >= body_size * 1.1) or is_numbered_heading or is_critical_heading:
+                    md_lines.append(f"## {clean}")
+                elif (is_bold and line_size >= body_size * 0.95 and len(clean) < 80) or is_all_caps_heading:
+                    md_lines.append(f"### {clean}")
+                else:
+                    md_lines.append(clean)
                     
-                    if line_size >= body_size * 1.6:
-                        md_lines.append(f"# {clean}")
-                    elif line_size >= body_size * 1.3 or (is_bold and line_size >= body_size * 1.1) or is_numbered_heading or is_critical_heading:
-                        md_lines.append(f"## {clean}")
-                    elif (is_bold and line_size >= body_size * 0.95 and len(clean) < 80) or is_all_caps_heading:
-                        md_lines.append(f"### {clean}")
-                    else:
-                        md_lines.append(clean)
             md_lines.append("")  # page break
         
         doc.close()

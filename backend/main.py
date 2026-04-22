@@ -262,6 +262,27 @@ async def translate(
         if not url.startswith(("http://", "https://")):
             raise HTTPException(status_code=400, detail="Invalid URL format.")
         
+        # ── Auto-normalize common academic URLs to direct PDF links ──
+        import re as _re
+        
+        # arXiv: /abs/2307.03172 → /pdf/2307.03172
+        arxiv_abs = _re.match(r'https?://arxiv\.org/abs/(.+?)(?:v\d+)?$', url)
+        if arxiv_abs:
+            url = f"https://arxiv.org/pdf/{arxiv_abs.group(1)}"
+            logger.info(f"Auto-converted arXiv abstract → PDF: {url}")
+        
+        # bioRxiv / medRxiv: add .full.pdf if not already a PDF link
+        biorxiv_match = _re.match(r'(https?://(?:www\.)?(?:biorxiv|medrxiv)\.org/content/.+?)(?:\.full\.pdf)?$', url)
+        if biorxiv_match and not url.endswith('.pdf'):
+            url = biorxiv_match.group(1) + ".full.pdf"
+            logger.info(f"Auto-converted bioRxiv/medRxiv → PDF: {url}")
+        
+        # PubMed Central: /articles/PMC... → /articles/PMC.../pdf
+        pmc_match = _re.match(r'https?://(?:www\.)?ncbi\.nlm\.nih\.gov/pmc/articles/(PMC\d+)/?$', url)
+        if pmc_match:
+            url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmc_match.group(1)}/pdf"
+            logger.info(f"Auto-converted PMC → PDF: {url}")
+        
         # Browser-like headers to avoid 403 from publisher CDNs
         download_headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
