@@ -44,6 +44,7 @@ Translate ONLY the specific English chunk provided below into **{language_name}*
 6. **Preserve line breaks exactly**: If authors and affiliations are on multiple lines, keep them on exactly the same lines with the exact same superscripts/asterisks (e.g., `Author1*, Author2`).
 7. **Technical accuracy**: Scientific claims, numerical data, and methodological descriptions must be translated with 100% fidelity.
 8. **ZERO PARAPHRASING & ZERO SUMMARIZATION**: Do not add extra filler. Do not invent headings. Do NOT summarize the paper. If the input is just a Title and Authors, translate ONLY the Title and Authors. Do not hallucinate the abstract or introduction.
+9. **NO CHUNK ARTIFACTS**: You are translating chunks of a larger document. Do NOT output any chunk metadata, page numbers, or artifact titles like '(Part 3)', '(অংশ ২)', or '(continued)'. Output ONLY the clean, translated academic text.
 
 {glossary_prompt}
 
@@ -434,6 +435,7 @@ async def translate_paper(
     
     full_translated_markdown = ""
     section_scores = []
+    _emitted_titles = set()  # Track which section titles have already been emitted as headings
     
     for i, section in enumerate(sections):
 
@@ -467,7 +469,14 @@ async def translate_paper(
         
         # --- Pass 1: Translate ---
         yield {"type": "status", "data": f"⏳ [{section_index_txt}] Translating: {section_title}..."}
-        section_content = f"## {section_title}\n\n{section['content']}"
+        
+        # For chunked sections: only include heading for the first chunk
+        is_continuation = section_title in _emitted_titles
+        if is_continuation:
+            section_content = section['content']
+        else:
+            section_content = f"## {section_title}\n\n{section['content']}"
+            _emitted_titles.add(section_title)
         
         try:
             translated_chunk = await _get_llm_response(

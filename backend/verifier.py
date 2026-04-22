@@ -238,8 +238,9 @@ def split_into_sections(text: str) -> List[Dict[str, str]]:
                 # If adding this paragraph pushes us over the limit, flush the current chunk
                 if current_length + len(stripped_p) > MAX_CHARS and current_chunk:
                     safe_sections.append({
-                        "title": f"{sec['title']} (Part {part_index})",
-                        "content": "\n\n".join(current_chunk)
+                        "title": sec["title"],
+                        "content": "\n\n".join(current_chunk),
+                        "_chunk_index": part_index,
                     })
                     part_index += 1
                     current_chunk = []
@@ -250,10 +251,10 @@ def split_into_sections(text: str) -> List[Dict[str, str]]:
                 
             # Append remaining chunk
             if current_chunk:
-                title_suffix = f" (Part {part_index})" if part_index > 1 else ""
                 safe_sections.append({
-                    "title": f"{sec['title']}{title_suffix}",
-                    "content": "\n\n".join(current_chunk)
+                    "title": sec["title"],
+                    "content": "\n\n".join(current_chunk),
+                    "_chunk_index": part_index if part_index > 1 else None,
                 })
 
     return safe_sections
