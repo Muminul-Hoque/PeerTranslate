@@ -39,6 +39,14 @@ const progressLabel = document.getElementById('progress-label');
 const cacheBadge = document.getElementById('cache-badge');
 const sidebysideBtn = document.getElementById('sidebyside-btn');
 const sidebysideContainer = document.getElementById('sidebyside-container');
+const viewToggle = document.getElementById('view-toggle');
+const viewTextBtn = document.getElementById('view-text-btn');
+const viewPdfBtn = document.getElementById('view-pdf-btn');
+const pdfViewerContainer = document.getElementById('pdf-viewer-container');
+const pdfLoadingState = document.getElementById('pdf-loading-state');
+const pdfIframe = document.getElementById('pdf-iframe');
+
+let cachedPdfUrl = null;
 
 // ── Initialize ──
 document.addEventListener('DOMContentLoaded', () => {
@@ -279,6 +287,7 @@ function setupEventListeners() {
             if (sideBySideActive) {
                 sidebysideContainer.style.display = 'block';
                 outputBody.style.display = 'none';
+                pdfViewerContainer.style.display = 'none';
                 sidebysideBtn.textContent = '📄 Single View';
                 // populate side panels from in-memory content
                 populateSideBySide();
@@ -287,6 +296,42 @@ function setupEventListeners() {
                 outputBody.style.display = 'block';
                 sidebysideBtn.textContent = '📖 Side-by-Side';
             }
+        });
+    }
+
+    // View Toggles
+    if (viewTextBtn && viewPdfBtn) {
+        viewTextBtn.addEventListener('click', () => {
+            viewTextBtn.classList.add('active');
+            viewTextBtn.style.background = 'var(--accent-cyan)';
+            viewTextBtn.style.color = '#000';
+            viewPdfBtn.classList.remove('active');
+            viewPdfBtn.style.background = 'transparent';
+            viewPdfBtn.style.color = 'var(--text-secondary)';
+
+            pdfViewerContainer.style.display = 'none';
+            if (sideBySideActive) {
+                sidebysideContainer.style.display = 'block';
+            } else {
+                outputBody.style.display = 'block';
+            }
+            if (sidebysideBtn) sidebysideBtn.style.display = 'inline-flex';
+        });
+
+        viewPdfBtn.addEventListener('click', () => {
+            viewPdfBtn.classList.add('active');
+            viewPdfBtn.style.background = 'var(--accent-amber)';
+            viewPdfBtn.style.color = '#000';
+            viewTextBtn.classList.remove('active');
+            viewTextBtn.style.background = 'transparent';
+            viewTextBtn.style.color = 'var(--text-secondary)';
+
+            outputBody.style.display = 'none';
+            if (sidebysideContainer) sidebysideContainer.style.display = 'none';
+            pdfViewerContainer.style.display = 'block';
+            if (sidebysideBtn) sidebysideBtn.style.display = 'none';
+
+            loadPdfPreview();
         });
     }
 
@@ -431,8 +476,31 @@ async function startTranslation() {
     totalSections = 0;
     completedSections = 0;
     sideBySideActive = false;
+    
+    if (cachedPdfUrl) {
+        URL.revokeObjectURL(cachedPdfUrl);
+        cachedPdfUrl = null;
+    }
+    if (pdfIframe) {
+        pdfIframe.src = '';
+        pdfIframe.style.display = 'none';
+    }
+    if (pdfLoadingState) pdfLoadingState.style.display = 'flex';
+    if (viewToggle) viewToggle.style.display = 'none';
+    
+    // Reset toggle styles to text mode
+    if (viewTextBtn && viewPdfBtn) {
+        viewTextBtn.classList.add('active');
+        viewTextBtn.style.background = 'var(--accent-cyan)';
+        viewTextBtn.style.color = '#000';
+        viewPdfBtn.classList.remove('active');
+        viewPdfBtn.style.background = 'transparent';
+        viewPdfBtn.style.color = 'var(--text-secondary)';
+    }
+
     if (sidebysideBtn) sidebysideBtn.textContent = '📖 Side-by-Side';
     if (sidebysideContainer) sidebysideContainer.style.display = 'none';
+    if (pdfViewerContainer) pdfViewerContainer.style.display = 'none';
 
     // 2. Prepare UI
     resultsSection.classList.add('visible');
@@ -661,6 +729,7 @@ function handleSSEEvent(type, rawData) {
             setTimeout(() => { if (progressContainer) progressContainer.style.display = 'none'; }, 2000);
             showDownloadActions();
             if (sidebysideBtn) sidebysideBtn.style.display = 'inline-flex';
+            if (viewToggle && lastTranslatedFile) viewToggle.style.display = 'inline-flex';
             break;
     }
 }
@@ -962,6 +1031,61 @@ function escapeHtml(text) {
 
 // ── Download as PDF ──
 document.getElementById('download-pdf-btn')?.addEventListener('click', () => downloadAsPDF());
+
+// ── Inline PDF Loader ──
+async function loadPdfPreview() {
+    if (cachedPdfUrl) {
+        pdfLoadingState.style.display = 'none';
+        pdfIframe.style.display = 'block';
+        return;
+    }
+
+    const md = rawMarkdown || outputBody.dataset.rawMarkdown;
+    if (!md || !lastTranslatedFile) return;
+
+    pdfLoadingState.style.display = 'flex';
+    pdfIframe.style.display = 'none';
+
+    try {
+        const formData = new FormData();
+
+        if (lastTranslatedFile.type === 'file') {
+            formData.append('file', lastTranslatedFile.file);
+        } else if (lastTranslatedFile.type === 'url') {
+            const resp = await fetch(lastTranslatedFile.url);
+            const blob = await resp.blob();
+            formData.append('file', blob, 'paper.pdf');
+        }
+
+        formData.append('translated_markdown', md);
+        formData.append('original_english', originalMarkdown || '');
+        formData.append('language', languageSelect.value || 'bn');
+        formData.append('filename', 'preview');
+
+        const response = await fetch('/api/export/pdf-preserved', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) throw new Error('Preview generation failed');
+
+        const blob = await response.blob();
+        cachedPdfUrl = URL.createObjectURL(blob);
+        
+        pdfIframe.src = cachedPdfUrl;
+        pdfLoadingState.style.display = 'none';
+        pdfIframe.style.display = 'block';
+    } catch (e) {
+        console.error('PDF preview failed:', e);
+        pdfLoadingState.innerHTML = `
+            <div style="font-size:2rem;margin-bottom:1rem;">⚠️</div>
+            <div style="font-weight:600; color: var(--accent-rose);">Failed to generate PDF</div>
+            <div style="font-size:0.85rem; margin-top: 0.5rem; text-align: center; padding: 0 2rem;">The server encountered an error while applying the layout. You can still download the Markdown or use the browser's print dialog.</div>
+            <button onclick="document.getElementById('view-text-btn').click()" style="margin-top: 1rem; padding: 8px 16px; background: transparent; color: #fff; border: 1px solid #666; border-radius: 4px; cursor: pointer;">Return to Text View</button>
+        `;
+    }
+}
+
 // ── Download as DOCX ──
 document.getElementById('download-docx-btn')?.addEventListener('click', () => downloadDocx());
 // ── Download as LaTeX ──
