@@ -157,22 +157,107 @@ def _build_translation_map(
 ) -> Dict[str, str]:
     """
     Build a mapping from normalized original paragraphs to translated paragraphs.
-    Uses paragraph-level alignment by splitting on double newlines.
+    
+    Strategy:
+    1. Split both texts into sections by ## headings
+    2. Match sections by heading similarity
+    3. Within matched sections, align paragraphs sequentially
+    4. For unmatched paragraphs, use word-overlap fuzzy matching
     """
-    # Split both texts into paragraphs
-    orig_paras = [p.strip() for p in re.split(r'\n\s*\n', original_text) if p.strip()]
-    trans_paras = [p.strip() for p in re.split(r'\n\s*\n', translated_text) if p.strip()]
-
     mapping: Dict[str, str] = {}
-
-    # 1:1 alignment by index
-    for i, orig_para in enumerate(orig_paras):
-        normalized = _normalize_text(orig_para)
-        if not normalized or len(normalized) < 5:
-            continue
-        if i < len(trans_paras):
-            mapping[normalized] = trans_paras[i]
-
+    
+    def split_into_sections(text):
+        """Split markdown into sections by ## headings."""
+        sections = []
+        current_heading = ""
+        current_body = []
+        
+        for line in text.split('\n'):
+            stripped = line.strip()
+            if stripped.startswith('## ') or stripped.startswith('# '):
+                if current_heading or current_body:
+                    sections.append((current_heading, '\n'.join(current_body)))
+                current_heading = re.sub(r'^#+\s*', '', stripped).strip()
+                current_body = []
+            else:
+                current_body.append(line)
+        
+        if current_heading or current_body:
+            sections.append((current_heading, '\n'.join(current_body)))
+        
+        return sections
+    
+    def split_paragraphs(text):
+        """Split text into paragraphs."""
+        return [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip() and len(p.strip()) > 5]
+    
+    def word_overlap(a, b):
+        """Compute word overlap ratio between two strings."""
+        words_a = set(_normalize_text(a).split())
+        words_b = set(_normalize_text(b).split())
+        if not words_a or not words_b:
+            return 0.0
+        intersection = words_a & words_b
+        return len(intersection) / min(len(words_a), len(words_b))
+    
+    orig_sections = split_into_sections(original_text)
+    trans_sections = split_into_sections(translated_text)
+    
+    # Match sections by heading similarity
+    used_trans = set()
+    section_pairs = []
+    
+    for oi, (o_heading, o_body) in enumerate(orig_sections):
+        best_idx = -1
+        best_score = 0.3  # Minimum threshold
+        
+        for ti, (t_heading, t_body) in enumerate(trans_sections):
+            if ti in used_trans:
+                continue
+            # Headings might be translated, so check word overlap AND position proximity
+            h_overlap = word_overlap(o_heading, t_heading) if o_heading and t_heading else 0
+            # Also give bonus for being at similar position
+            pos_bonus = 0.2 if abs(oi - ti) <= 2 else 0
+            score = h_overlap + pos_bonus
+            
+            if score > best_score:
+                best_score = score
+                best_idx = ti
+        
+        if best_idx >= 0:
+            used_trans.add(best_idx)
+            section_pairs.append((oi, best_idx))
+    
+    # For sections without heading match, align by position
+    unmatched_orig = [i for i in range(len(orig_sections)) if i not in [p[0] for p in section_pairs]]
+    unmatched_trans = [i for i in range(len(trans_sections)) if i not in used_trans]
+    
+    for oi, ti in zip(unmatched_orig, unmatched_trans):
+        section_pairs.append((oi, ti))
+    
+    section_pairs.sort()
+    
+    # Within each matched section pair, align paragraphs
+    for oi, ti in section_pairs:
+        o_paras = split_paragraphs(orig_sections[oi][1])
+        t_paras = split_paragraphs(trans_sections[ti][1])
+        
+        # Simple sequential alignment within the section
+        for pi, o_para in enumerate(o_paras):
+            normalized = _normalize_text(o_para)
+            if not normalized or len(normalized) < 5:
+                continue
+            if pi < len(t_paras):
+                mapping[normalized] = t_paras[pi]
+    
+    # Also add heading-level mappings (original heading → translated heading)
+    for oi, ti in section_pairs:
+        o_h = orig_sections[oi][0]
+        t_h = trans_sections[ti][0]
+        if o_h and t_h:
+            mapping[_normalize_text(o_h)] = t_h
+    
+    logger.info(f"Translation map: {len(mapping)} paragraph pairs from {len(section_pairs)} section pairs")
     return mapping
 
 
@@ -183,31 +268,53 @@ def _find_best_match(
 ) -> Optional[str]:
     """
     Find the best matching translation for a given text block.
-    Uses substring matching with a preference for longer matches.
+    Uses word-overlap fuzzy matching with a preference for longer matches.
     """
     normalized_block = _normalize_text(block_text)
     if not normalized_block or len(normalized_block) < 5:
         return None
 
+    block_words = set(normalized_block.split())
+    if not block_words:
+        return None
+
     best_match = None
-    best_overlap = 0
+    best_score = 0.0
 
     for orig_norm, translated in translation_map.items():
         if orig_norm in used_keys:
             continue
 
-        # Check if the block text is a substring of the original or vice versa
+        # Method 1: Exact/substring match (strongest signal)
+        if normalized_block == orig_norm:
+            used_keys.add(orig_norm)
+            return translated
+        
+        # Method 2: Substring containment
         if normalized_block in orig_norm or orig_norm in normalized_block:
-            overlap = min(len(normalized_block), len(orig_norm))
-            if overlap > best_overlap:
-                best_overlap = overlap
+            overlap = min(len(normalized_block), len(orig_norm)) / max(len(normalized_block), len(orig_norm))
+            if overlap > best_score:
+                best_score = overlap
                 best_match = (orig_norm, translated)
+            continue
+        
+        # Method 3: Word overlap ratio
+        orig_words = set(orig_norm.split())
+        intersection = block_words & orig_words
+        if not orig_words:
+            continue
+        overlap_ratio = len(intersection) / min(len(block_words), len(orig_words))
+        
+        if overlap_ratio > best_score and overlap_ratio >= 0.4:
+            best_score = overlap_ratio
+            best_match = (orig_norm, translated)
 
-    if best_match and best_overlap > 10:
+    if best_match and best_score >= 0.3:
         used_keys.add(best_match[0])
         return best_match[1]
 
     return None
+
 
 
 def render_preserved_pdf(
