@@ -722,7 +722,7 @@ async def translate_paper(
                 # Mock a bypassed score for the split section so it doesn't break metrics
                 score_obj = SectionScore(
                     section_title=section_title, original_text=section["content"][:100],
-                    back_translated_text="-dynamic-split-", similarity_score=0.5, confidence_label="needs_review"
+                    back_translated_text="-dynamic-split-", similarity_score=0.5
                 )
                 section_scores.append(score_obj)
                 
@@ -746,7 +746,7 @@ async def translate_paper(
             # Mock failed score
             score_obj = SectionScore(
                 section_title=section_title, original_text=section["content"][:100],
-                back_translated_text="-failed-", similarity_score=0.0, confidence_label="low_confidence"
+                back_translated_text="-failed-", similarity_score=0.0
             )
             section_scores.append(score_obj)
 
