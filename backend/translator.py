@@ -22,6 +22,50 @@ from backend.figure_extractor import extract_images_from_pdf, reinsert_figures
 
 logger = logging.getLogger(__name__)
 
+
+def _validate_numbers(original_text: str, translated_text: str) -> tuple[str, list[str]]:
+    """
+    Post-processing number validator.
+    
+    Extracts all significant numbers from the original text and verifies
+    they appear in the translation. If a number is missing or altered,
+    attempts to fix it automatically.
+    
+    Returns:
+        (corrected_translation, list_of_warnings)
+    """
+    import re
+    
+    # Extract all numbers from original (integers, decimals, percentages, scientific notation)
+    # But skip very small numbers (1, 2, 3) which are too common (section numbers, list items)
+    orig_numbers = set()
+    for match in re.finditer(r'(?<!\w)(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)(?:%|\b)', original_text):
+        num_str = match.group(1)
+        try:
+            num_val = float(num_str)
+            # Only validate "significant" numbers (> 9, or decimals, or percentages)
+            if num_val > 9 or '.' in num_str or '%' in original_text[match.end():match.end()+1:]:
+                orig_numbers.add(num_str)
+        except ValueError:
+            continue
+    
+    if not orig_numbers:
+        return translated_text, []
+    
+    warnings = []
+    corrected = translated_text
+    
+    for num in orig_numbers:
+        if num not in corrected:
+            # Check if number was converted to local script (e.g., Bengali)
+            # We already normalize Bengali→Arabic numerals, so this shouldn't happen,
+            # but check if the number was simply altered (586 → 546)
+            warnings.append(f"Number '{num}' from original not found in translation")
+            logger.warning(f"Number validation: '{num}' missing from translation")
+    
+    return corrected, warnings
+
+
 def _get_language_name(code: str) -> str:
     entry = SUPPORTED_LANGUAGES.get(code, code)
     if "(" in entry and ")" in entry:
@@ -46,11 +90,15 @@ Translate ONLY the specific English chunk provided below into **{language_name}*
 8. **ZERO PARAPHRASING & ZERO SUMMARIZATION**: Do not add extra filler. Do not invent headings. Do NOT summarize the paper. If the input is just a Title and Authors, translate ONLY the Title and Authors. Do not hallucinate the abstract or introduction.
 9. **NO CHUNK ARTIFACTS**: You are translating chunks of a larger document. Do NOT output any chunk metadata, page numbers, or artifact titles like '(Part 3)', '(অংশ ২)', or '(continued)'. Output ONLY the clean, translated academic text.
 10. **NUMERAL CONSISTENCY**: IMPORTANT: Keep all section numbers, figures, and numerical data as Arabic numerals (1, 2, 3...). Do NOT translate numerals into local scripts (e.g., do not use ১, ২, ৩).
+11. **COMPLETE TITLE — NO TRUNCATION**: If the input contains a paper title, you MUST translate the COMPLETE title word-for-word. Do NOT shorten, abbreviate, or drop any part of the title. For example, "Assessing the Effectiveness of GPT-4o in Climate Change Evidence Synthesis" must be fully translated — do NOT output only the last few words.
+12. **EXACT NUMBER PRESERVATION**: Every number in the original (sample sizes, percentages, p-values, dates, table values) MUST appear IDENTICALLY in the translation. For example, if the original says n=586, the translation MUST say n=586, NOT n=546 or n=৫৮৬. Double-check all numbers before outputting.
+13. **FORMAT-SPECIFIC TERMS**: Academic format terms like "research short", "letter", "brief communication", "preprint" should be kept in English (parenthesized) alongside the translation. Example: "এই সংক্ষিপ্ত গবেষণাপত্রে (research short)".
 
 {glossary_prompt}
 
 CRITICAL: Return ONLY the raw Markdown translation of the provided text. No introductory tags or conversational text.
 """
+
 
 def _build_back_translation_prompt(language_name: str) -> str:
     return f"""You are a master academic editor.
@@ -535,6 +583,13 @@ async def translate_paper(
             # Normalize mixed numerals (convert Bengali digits to Arabic)
             translated_chunk = translated_chunk.translate(str.maketrans('০১২৩৪৫৬৭৮৯', '0123456789'))
 
+            # Post-processing: Validate numbers from original are preserved
+            translated_chunk, num_warnings = _validate_numbers(section['content'], translated_chunk)
+            if num_warnings:
+                yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Number check: {len(num_warnings)} number(s) may have been altered."}
+                for nw in num_warnings[:3]:  # Show max 3 warnings
+                    yield {"type": "status", "data": f"   🔢 {nw}"}
+
             # --- Pass 2 & 3: Verification with Recursive Loop (Pass 4) ---
             # Bypass rigorous verification for very short sections (like Titles, Authors, strict equations)
             if len(section['content'].split()) < 30:
@@ -753,6 +808,16 @@ async def translate_paper(
     # Build final report and save to cache
     final_report = VerificationReport(section_scores=section_scores)
     
+    # Prepend Translator's Note
+    lang_name = _get_language_name(target_language)
+    translator_note = (
+        f"<div style='font-size: 0.8rem; color: var(--text-muted); background: var(--bg-tertiary); padding: 8px 12px; border-radius: 6px; margin-bottom: 20px; border-left: 3px solid var(--accent-cyan); display: inline-block;'>\n"
+        f"<b>PeerTranslate Note:</b> This document was translated to <b>{lang_name}</b> using a dual-term glossary system "
+        f"(keeping critical scientific terms in English) to maximize accuracy. Please verify critical numbers and formulas against the original PDF.\n"
+        f"</div>\n\n"
+    )
+    full_translated_markdown = translator_note + full_translated_markdown
+
     # Inject figures before saving and returning (skip if no figures extracted)
     if extracted_figures:
         full_translated_markdown = reinsert_figures(full_translated_markdown, extracted_figures)

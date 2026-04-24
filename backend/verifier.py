@@ -183,17 +183,19 @@ def split_into_sections(text: str) -> List[Dict[str, str]]:
             if normalized_title in seen_titles and normalized_title in generic_sections:
                 continue
             
-            # Save previous section if it has meaningful content
-            if current_content:
-                content_text = "\n".join(current_content).strip()
-                # If the section content is literally just the title again, ignore it
-                if content_text.lower() != current_title.lower() and content_text:
-                    sections.append(
-                        {
-                            "title": current_title,
-                            "content": content_text,
-                        }
-                    )
+            # Save previous section
+            # Always emit — even if content is empty, the HEADING itself needs translating
+            # (e.g., "3 Method" appears before "3.1 Dataset" with no body text in between)
+            content_text = "\n".join(current_content).strip()
+            # Only skip if the content is literally just the title repeated
+            if content_text.lower() == current_title.lower():
+                content_text = ""
+            sections.append(
+                {
+                    "title": current_title,
+                    "content": content_text,
+                }
+            )
             
             current_title = title
             seen_titles.add(normalized_title)
