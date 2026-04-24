@@ -957,14 +957,19 @@ body::before {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: var(--space-md);
+    background: var(--bg-primary);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
 }
 
 .output-body th,
 .output-body td {
-    padding: 8px 12px;
+    padding: 10px 14px;
     border: 1px solid var(--border-subtle);
     text-align: left;
     font-size: 0.9rem;
+    color: var(--text-secondary);
 }
 
 .output-body th {
@@ -972,6 +977,10 @@ body::before {
     font-family: var(--font-display);
     font-weight: 600;
     color: var(--text-primary);
+}
+
+.output-body tr:hover td {
+    background: var(--bg-glass-hover);
 }
 
 /* ── Footer ── */

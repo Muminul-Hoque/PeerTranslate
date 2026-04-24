@@ -271,6 +271,12 @@ async def translate(
             url = f"https://arxiv.org/pdf/{arxiv_abs.group(1)}"
             logger.info(f"Auto-converted arXiv abstract → PDF: {url}")
         
+        # arXiv HTML viewer: /html/2407.12826v1 → /pdf/2407.12826v1
+        arxiv_html = _re.match(r'https?://arxiv\.org/html?/(\d+\.\d+(?:v\d+)?)', url)
+        if arxiv_html:
+            url = f"https://arxiv.org/pdf/{arxiv_html.group(1)}"
+            logger.info(f"Auto-converted arXiv HTML → PDF: {url}")
+        
         # bioRxiv / medRxiv: add .full.pdf if not already a PDF link
         biorxiv_match = _re.match(r'(https?://(?:www\.)?(?:biorxiv|medrxiv)\.org/content/.+?)(?:\.full\.pdf)?$', url)
         if biorxiv_match and not url.endswith('.pdf'):

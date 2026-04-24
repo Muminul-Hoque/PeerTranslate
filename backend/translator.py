@@ -498,8 +498,7 @@ async def translate_paper(
                  section_title=section_title, 
                  original_text=section["content"][:100], 
                  back_translated_text="-reference-bypass-", 
-                 similarity_score=1.0,
-                 confidence_label="skipped"
+                 similarity_score=1.0
              )
              full_translated_markdown += best_chunk + "\n\n"
              section_scores.append(final_score_obj)
