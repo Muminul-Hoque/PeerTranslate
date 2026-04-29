@@ -30,13 +30,14 @@ Millions of researchers worldwide struggle to read English-language papers in th
 PeerTranslate uses a **4-pass Verify Loop** to deliver accurate, verified translations:
 
 ```
-📄 Upload PDF → 🔄 Translate with Glossary → 🔁 Back-Translate → 🔍 Score & Verify → ✅ Result
+📄 Upload PDF → 🧠 Semantic Extraction → 🔄 Translate with Glossary → 🔁 Back-Translate → 🔍 Score & Verify → ✅ Result
 ```
 
 | Feature | PeerTranslate | Others |
 |---|---|---|
 | Multi-pass verification | ✅ Back-translation scoring | ❌ Single pass |
 | Domain glossaries | ✅ Community-curated, term-locked | ❌ Generic translation |
+| Layout Preservation | ✅ Perfect Tables & Math via Gemini Vision | ❌ Corrupted text geometry |
 | Accuracy scoring | ✅ Per-section confidence scores | ❌ No measurement |
 | Low-resource languages | ✅ Bengali-first, any language welcome | ❌ Poor support |
 | Open source | ✅ AGPL v3 | ⚠️ Varies |
@@ -49,12 +50,13 @@ PeerTranslate runs a **4-pass pipeline** on every paper:
 
 | Pass | What Happens |
 |---|---|
-| **Pass 1** 📄 | Translate the full paper using Gemini AI + domain-specific glossary term-locking |
-| **Pass 2** 🔁 | Back-translate the result to English |
-| **Pass 3** 🔍 | Compare original ↔ back-translation, compute per-section similarity scores |
-| **Pass 4** ✅ | Re-translate any section that falls below the confidence threshold |
+| **Pass 0** 🧠 | Gemini Vision natively extracts the PDF into Semantic Markdown, perfectly preserving `\| Tables \|` and `$$ Math Equations $$`. |
+| **Pass 1** 📄 | Translate the full paper using an LLM (Gemini/OpenRouter) + domain-specific glossary term-locking. |
+| **Pass 2** 🔁 | Back-translate the result to English. |
+| **Pass 3** 🔍 | Compare original ↔ back-translation, compute per-section similarity scores. |
+| **Pass 4** ✅ | Re-translate any section that falls below the confidence threshold. |
 
-The result: a translated paper with a **verification report** showing confidence scores for each section.
+The result: a translated paper with a **verification report** showing confidence scores for each section, which can be compiled instantly into a beautiful two-column PDF in your browser.
 
 ---
 
