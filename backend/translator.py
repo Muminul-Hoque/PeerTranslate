@@ -329,117 +329,62 @@ async def translate_paper(
     yield {"type": "status", "data": "📄 Initializing PDF processing engine..."}
     
     # ═══════════════════════════════════════════════════════════════
-    # STEP 1: LIGHTWEIGHT TEXT EXTRACTION (PyMuPDF / fitz)
-    #   Uses zero heavy dependencies — runs on 512 MB free tier.
-    #   Reconstructs Markdown headings via font-size heuristics.
+    # STEP 1: SEMANTIC MARKDOWN EXTRACTION (Gemini Vision API)
+    #   Replaces legacy PyMuPDF coordinate mapping. Perfectly extracts
+    #   tables as Markdown and equations as LaTeX.
     # ═══════════════════════════════════════════════════════════════
-    yield {"type": "status", "data": "📥 Extracting text with PyMuPDF..."}
+    yield {"type": "status", "data": "📥 Extracting Semantic Markdown with Gemini Vision..."}
     original_english_text = ""
     try:
-        import fitz
-        doc = fitz.open(tmp_path)
+        import asyncio
+        import google.generativeai as genai
         
-        # Collect all font sizes to detect headings via relative sizing
-        all_sizes = []
-        page_blocks = []
-        for page in doc:
-            blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
-            page_blocks.append(blocks)
-            for b in blocks:
-                if b["type"] == 0:  # text block
-                    for line in b["lines"]:
-                        for span in line["spans"]:
-                            if span["text"].strip():
-                                all_sizes.append(round(span["size"], 1))
+        # Determine which key to use for extraction
+        extract_key = api_key if (api_key and user_provider == "google") else settings.gemini_api_key
+        genai.configure(api_key=extract_key)
         
-        # Determine body font size (most common) and heading thresholds
-        if all_sizes:
-            from collections import Counter
-            size_counts = Counter(all_sizes)
-            body_size = size_counts.most_common(1)[0][0]
-        else:
-            body_size = 10.0
+        extract_model_name = user_model if (user_model and user_provider == "google") else "gemini-2.5-flash"
+        model = genai.GenerativeModel(extract_model_name)
         
-        # Build markdown from font-size analysis
-        md_lines = []
-        for blocks in page_blocks:
-            # 1. Collect raw lines with styling info
-            raw_lines = []
-            for b in blocks:
-                if b["type"] != 0:
-                    continue
-                for line in b["lines"]:
-                    line_text = ""
-                    max_size = 0
-                    is_bold = False
-                    for span in line["spans"]:
-                        line_text += span["text"]
-                        max_size = max(max_size, span["size"])
-                        if "bold" in span["font"].lower():
-                            is_bold = True
-                    
-                    clean = line_text.strip()
-                    if clean:
-                        raw_lines.append({"text": clean, "size": max_size, "bold": is_bold})
-                        
-            # 2. Merge standalone numbers with the following line (fixes NIPS/IEEE formatting)
-            merged_lines = []
-            skip_next = False
-            for i, current in enumerate(raw_lines):
-                if skip_next:
-                    skip_next = False
-                    continue
-                
-                # If current line is just a number/decimal and next line starts with a capital letter
-                if i + 1 < len(raw_lines):
-                    next_line = raw_lines[i+1]
-                    import re
-                    is_standalone_num = bool(re.match(r'^(\d+(\.\d+)*)\.?$', current["text"]))
-                    next_is_capitalized = bool(re.match(r'^[A-Z]', next_line["text"]))
-                    
-                    if is_standalone_num and next_is_capitalized and len(next_line["text"]) < 80:
-                        merged_lines.append({
-                            "text": f'{current["text"]} {next_line["text"]}',
-                            "size": max(current["size"], next_line["size"]),
-                            "bold": current["bold"] or next_line["bold"]
-                        })
-                        skip_next = True
-                        continue
-                
-                merged_lines.append(current)
-
-            # 3. Apply heading heuristics to merged lines
-            for line_info in merged_lines:
-                clean = line_info["text"]
-                line_size = line_info["size"]
-                is_bold = line_info["bold"]
-                
-                import re
-                is_numbered_heading = bool(re.match(r'^(\d+(\.\d+)*)\s+[A-Z].*$', clean)) and len(clean) < 120
-                is_all_caps_heading = clean.isupper() and len(clean) > 3 and len(clean) < 50
-                
-                # Hardcoded semantic checks for critical Quick Mode sections
-                clean_lower = clean.lower()
-                is_critical_heading = clean_lower in {"abstract", "introduction", "conclusion", "summary", "references", "acknowledgements", "background", "methodology"}
-                if len(clean) < 50 and bool(re.match(r'^(\d+)\s+(introduction|conclusion|summary|background|methodology|experiments|results)', clean_lower)):
-                    is_critical_heading = True
-                
-                if line_size >= body_size * 1.6:
-                    md_lines.append(f"# {clean}")
-                elif line_size >= body_size * 1.3 or (is_bold and line_size >= body_size * 1.1) or is_numbered_heading or is_critical_heading:
-                    md_lines.append(f"## {clean}")
-                elif (is_bold and line_size >= body_size * 0.95 and len(clean) < 80) or is_all_caps_heading:
-                    md_lines.append(f"### {clean}")
-                else:
-                    md_lines.append(clean)
-                    
-            md_lines.append("")  # page break
+        yield {"type": "status", "data": "📤 Uploading PDF to Gemini for structural analysis..."}
+        gemini_file = genai.upload_file(tmp_path, mime_type="application/pdf")
         
-        doc.close()
-        original_english_text = "\n".join(md_lines)
-        yield {"type": "status", "data": "✅ Text extraction complete."}
-    except Exception as fitz_err:
-        logger.error(f"PyMuPDF extraction failed: {fitz_err}")
+        yield {"type": "status", "data": "🧠 Gemini is converting PDF to Semantic Markdown (preserving tables/math)..."}
+        
+        prompt = (
+            "You are an expert academic document parser. "
+            "Convert this entire PDF document into perfectly structured Semantic Markdown. "
+            "CRITICAL INSTRUCTIONS: "
+            "1. Preserve ALL tables as standard Markdown tables (| Header |). "
+            "2. Preserve ALL mathematical equations as LaTeX blocks (using $$ for block and $ for inline). "
+            "3. Maintain the exact hierarchical structure using standard Markdown headings (#, ##, ###). "
+            "4. Output ONLY the raw Markdown text. Do not add any conversational preamble. "
+            "5. DO NOT translate the text. Keep it in the original language (English)."
+        )
+        
+        while gemini_file.state.name == 'PROCESSING':
+            yield {"type": "status", "data": "⏳ Waiting for Gemini to process the document..."}
+            await asyncio.sleep(2)
+            gemini_file = genai.get_file(gemini_file.name)
+            
+        if gemini_file.state.name == 'FAILED':
+            raise Exception("Gemini failed to process the uploaded PDF.")
+        
+        response = await asyncio.wait_for(
+            model.generate_content_async([gemini_file, prompt]),
+            timeout=300.0
+        )
+        
+        original_english_text = response.text
+        
+        try:
+            genai.delete_file(gemini_file.name)
+        except Exception as cleanup_err:
+            logger.warning(f"Failed to delete temporary Gemini file: {cleanup_err}")
+            
+        yield {"type": "status", "data": "✅ Semantic Markdown extraction complete."}
+    except Exception as extract_err:
+        logger.error(f"Gemini extraction failed: {extract_err}")
 
     if not original_english_text.strip():
         yield {"type": "error", "data": "❌ Could not extract any text from the PDF."}

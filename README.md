@@ -4,7 +4,7 @@
 
 ### Translate Research Papers into Your Own Language — With Verified Accuracy
 
-[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey?style=flat-square)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Powered by Gemini](https://img.shields.io/badge/AI-Google%20Gemini-orange?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev/)
 [![Contributions Welcome](https://img.shields.io/badge/Contributions-Welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
@@ -39,7 +39,7 @@ PeerTranslate uses a **4-pass Verify Loop** to deliver accurate, verified transl
 | Domain glossaries | ✅ Community-curated, term-locked | ❌ Generic translation |
 | Accuracy scoring | ✅ Per-section confidence scores | ❌ No measurement |
 | Low-resource languages | ✅ Bengali-first, any language welcome | ❌ Poor support |
-| Open source | ✅ CC BY-NC 4.0 | ⚠️ Varies |
+| Open source | ✅ AGPL v3 | ⚠️ Varies |
 
 ---
 
@@ -138,7 +138,7 @@ PeerTranslate/
 ├── CITATION.cff              # Academic citation metadata
 ├── CONTRIBUTING.md           # Contributor guide
 ├── CODE_OF_CONDUCT.md        # Community standards
-└── LICENSE                   # CC BY-NC 4.0 License
+└── LICENSE                   # AGPL v3 License
 ```
 
 ---
@@ -167,7 +167,7 @@ If PeerTranslate helps your research, please cite it:
     author       = {Muhammed Muminul Hoque},
     year         = {2026},
     url          = {https://github.com/muminul-hoque/PeerTranslate},
-    license      = {CC BY-NC 4.0}
+    license      = {AGPL v3}
 }
 ```
 
@@ -175,7 +175,12 @@ If PeerTranslate helps your research, please cite it:
 
 ## 📜 License
 
-This project is licensed under the [CC BY-NC 4.0 License](LICENSE).
+This project is licensed under the **AGPL v3 License** for open-source and academic use. See the [LICENSE](LICENSE) file for details.
+
+### Commercial Use
+If you intend to use PeerTranslate in a commercial product, proprietary system, or offer it as a paid service without open-sourcing your modifications, you must obtain a commercial license.
+
+Contact: **muminul951@gmail.com** for commercial licensing inquiries.
 
 ---
 

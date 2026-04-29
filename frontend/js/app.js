@@ -773,9 +773,18 @@ function renderTranslation(markdownText) {
         outputBody.innerHTML = basicMarkdownRender(markdownText);
     }
     
+    // Render MathJax equations
+    if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+        MathJax.typesetPromise([outputBody]).catch((err) => console.error('MathJax error: ', err));
+    }
+    
     // Live update the side-by-side view if it is active
     if (typeof sideBySideActive !== 'undefined' && sideBySideActive) {
         populateSideBySide();
+        if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+            const sideTrans = document.getElementById('output-body-sidebyside');
+            MathJax.typesetPromise([sideTrans]).catch((err) => console.error('MathJax error: ', err));
+        }
     }
 }
 
@@ -900,12 +909,6 @@ async function downloadAsPDF() {
     const md = rawMarkdown || outputBody.dataset.rawMarkdown;
     if (!md) { showNotification('No translation to export.', 'error'); return; }
 
-    // If we don't have the original file, fall back to browser print
-    if (!lastTranslatedFile) {
-        window.print();
-        return;
-    }
-
     const pdfBtn = document.getElementById('download-pdf-btn');
     if (pdfBtn) {
         pdfBtn.disabled = true;
@@ -913,42 +916,61 @@ async function downloadAsPDF() {
     }
 
     try {
-        const formData = new FormData();
-
-        if (lastTranslatedFile.type === 'file') {
-            formData.append('file', lastTranslatedFile.file);
-        } else if (lastTranslatedFile.type === 'url') {
-            // Re-download the PDF from URL for the export
-            const resp = await fetch(lastTranslatedFile.url);
-            const blob = await resp.blob();
-            formData.append('file', blob, 'paper.pdf');
-        }
-
-        formData.append('translated_markdown', md);
-        formData.append('original_english', originalMarkdown || '');
-        formData.append('language', languageSelect.value || 'bn');
-        formData.append('filename', `peertranslate_${languageSelect.value || 'translation'}`);
-
-        const response = await fetch('/api/export/pdf-preserved', {
-            method: 'POST',
-            body: formData,
+        const container = document.createElement('div');
+        container.style.cssText = `
+            padding: 40px;
+            font-family: 'Times New Roman', Times, serif;
+            color: #000;
+            background: #fff;
+            width: 800px;
+            font-size: 11pt;
+            line-height: 1.5;
+        `;
+        
+        container.innerHTML = typeof marked !== 'undefined' ? marked.parse(md) : basicMarkdownRender(md);
+        
+        // Basic academic styles
+        const headings = container.querySelectorAll('h1, h2, h3');
+        headings.forEach(h => {
+            h.style.fontFamily = 'Arial, sans-serif';
+            h.style.marginTop = '1.5em';
+            h.style.marginBottom = '0.5em';
+        });
+        
+        const tables = container.querySelectorAll('table');
+        tables.forEach(t => {
+            t.style.width = '100%';
+            t.style.borderCollapse = 'collapse';
+            t.style.marginBottom = '1em';
+            t.style.fontSize = '10pt';
+            t.querySelectorAll('th, td').forEach(cell => {
+                cell.style.border = '1px solid #000';
+                cell.style.padding = '4px 8px';
+            });
+            t.querySelectorAll('th').forEach(th => th.style.backgroundColor = '#f2f2f2');
         });
 
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(errText);
+        container.style.position = 'absolute';
+        container.style.left = '-9999px';
+        document.body.appendChild(container);
+
+        if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+            await MathJax.typesetPromise([container]);
         }
 
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `peertranslate_${languageSelect.value || 'translation'}_preserved.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        const opt = {
+            margin:       15,
+            filename:     `peertranslate_${languageSelect.value || 'translation'}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        await html2pdf().set(opt).from(container).save();
+        
+        document.body.removeChild(container);
         showNotification('Layout-preserved PDF downloaded!', 'success');
+        
     } catch (e) {
         console.error('PDF export failed:', e);
         showNotification('PDF export failed. Falling back to print dialog.', 'error');
@@ -1041,37 +1063,64 @@ async function loadPdfPreview() {
     }
 
     const md = rawMarkdown || outputBody.dataset.rawMarkdown;
-    if (!md || !lastTranslatedFile) return;
+    if (!md) return;
 
     pdfLoadingState.style.display = 'flex';
     pdfIframe.style.display = 'none';
 
     try {
-        const formData = new FormData();
-
-        if (lastTranslatedFile.type === 'file') {
-            formData.append('file', lastTranslatedFile.file);
-        } else if (lastTranslatedFile.type === 'url') {
-            const resp = await fetch(lastTranslatedFile.url);
-            const blob = await resp.blob();
-            formData.append('file', blob, 'paper.pdf');
-        }
-
-        formData.append('translated_markdown', md);
-        formData.append('original_english', originalMarkdown || '');
-        formData.append('language', languageSelect.value || 'bn');
-        formData.append('filename', 'preview');
-
-        const response = await fetch('/api/export/pdf-preserved', {
-            method: 'POST',
-            body: formData,
+        const container = document.createElement('div');
+        container.style.cssText = `
+            padding: 40px;
+            font-family: 'Times New Roman', Times, serif;
+            color: #000;
+            background: #fff;
+            width: 800px;
+            font-size: 11pt;
+            line-height: 1.5;
+        `;
+        
+        container.innerHTML = typeof marked !== 'undefined' ? marked.parse(md) : basicMarkdownRender(md);
+        
+        const headings = container.querySelectorAll('h1, h2, h3');
+        headings.forEach(h => {
+            h.style.fontFamily = 'Arial, sans-serif';
+            h.style.marginTop = '1.5em';
+            h.style.marginBottom = '0.5em';
+        });
+        const tables = container.querySelectorAll('table');
+        tables.forEach(t => {
+            t.style.width = '100%';
+            t.style.borderCollapse = 'collapse';
+            t.style.marginBottom = '1em';
+            t.querySelectorAll('th, td').forEach(cell => {
+                cell.style.border = '1px solid #ccc';
+                cell.style.padding = '6px';
+            });
+            t.querySelectorAll('th').forEach(th => th.style.backgroundColor = '#eee');
         });
 
-        if (!response.ok) throw new Error('Preview generation failed');
+        container.style.position = 'absolute';
+        container.style.left = '-9999px';
+        document.body.appendChild(container);
 
-        const blob = await response.blob();
-        cachedPdfUrl = URL.createObjectURL(blob);
+        if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+            await MathJax.typesetPromise([container]);
+        }
+
+        const opt = {
+            margin:       15,
+            filename:     'preview.pdf',
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        const pdfBlob = await html2pdf().set(opt).from(container).output('blob');
+        cachedPdfUrl = URL.createObjectURL(pdfBlob);
         
+        document.body.removeChild(container);
+
         pdfIframe.src = cachedPdfUrl;
         pdfLoadingState.style.display = 'none';
         pdfIframe.style.display = 'block';
@@ -1080,7 +1129,7 @@ async function loadPdfPreview() {
         pdfLoadingState.innerHTML = `
             <div style="font-size:2rem;margin-bottom:1rem;">⚠️</div>
             <div style="font-weight:600; color: var(--accent-rose);">Failed to generate PDF</div>
-            <div style="font-size:0.85rem; margin-top: 0.5rem; text-align: center; padding: 0 2rem;">The server encountered an error while applying the layout. You can still download the Markdown or use the browser's print dialog.</div>
+            <div style="font-size:0.85rem; margin-top: 0.5rem; text-align: center; padding: 0 2rem;">The browser encountered an error while rendering the document.</div>
             <button onclick="document.getElementById('view-text-btn').click()" style="margin-top: 1rem; padding: 8px 16px; background: transparent; color: #fff; border: 1px solid #666; border-radius: 4px; cursor: pointer;">Return to Text View</button>
         `;
     }
