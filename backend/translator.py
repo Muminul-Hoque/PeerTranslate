@@ -343,8 +343,7 @@ async def translate_paper(
         # Determine which key to use for extraction
         extract_key = api_key if (api_key and user_provider == "google") else settings.gemini_api_key
         genai.configure(api_key=extract_key)
-        
-        extract_model_name = user_model if (user_model and user_provider == "google") else "gemini-2.5-flash"
+        extract_model_name = user_model if (user_model and user_provider == "google") else settings.gemini_model
         model = genai.GenerativeModel(extract_model_name)
         
         yield {"type": "status", "data": "📤 Uploading PDF to Gemini for structural analysis..."}
@@ -383,12 +382,22 @@ async def translate_paper(
         except Exception as cleanup_err:
             logger.warning(f"Failed to delete temporary Gemini file: {cleanup_err}")
             
-        yield {"type": "status", "data": "✅ Semantic Markdown extraction complete."}
     except Exception as extract_err:
         logger.error(f"Gemini extraction failed: {extract_err}")
+        yield {"type": "status", "data": "⚠️ Gemini Vision extraction failed. Falling back to standard text extraction..."}
+        try:
+            import fitz
+            doc = fitz.open(stream=pdf_content, filetype="pdf")
+            original_english_text = ""
+            for page in doc:
+                original_english_text += page.get_text() + "\n\n"
+            doc.close()
+            yield {"type": "status", "data": "✅ Standard text extraction complete."}
+        except Exception as fallback_err:
+            logger.error(f"Fallback PyMuPDF extraction failed: {fallback_err}")
 
     if not original_english_text.strip():
-        yield {"type": "error", "data": "❌ Could not extract any text from the PDF."}
+        yield {"type": "error", "data": "❌ Could not extract any text from the PDF. It may be corrupted or image-only."}
         return
 
     # 1.5 Check Cache First (Now hashing the extracted text instead of raw PDF bytes)
