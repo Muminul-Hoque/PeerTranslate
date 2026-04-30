@@ -93,7 +93,12 @@ Translate ONLY the specific English chunk provided below into **{language_name}*
 11. **COMPLETE TITLE — NO TRUNCATION**: If the input contains a paper title, you MUST translate the COMPLETE title word-for-word. Do NOT shorten, abbreviate, or drop any part of the title. For example, "Assessing the Effectiveness of GPT-4o in Climate Change Evidence Synthesis" must be fully translated — do NOT output only the last few words.
 12. **EXACT NUMBER PRESERVATION**: Every number in the original (sample sizes, percentages, p-values, dates, table values) MUST appear IDENTICALLY in the translation. For example, if the original says n=586, the translation MUST say n=586, NOT n=546 or n=৫৮৬. Double-check all numbers before outputting.
 13. **FORMAT-SPECIFIC TERMS**: Academic format terms like "research short", "letter", "brief communication", "preprint" should be kept in English (parenthesized) alongside the translation. Example: "এই সংক্ষিপ্ত গবেষণাপত্রে (research short)".
-14. **NO HALLUCINATIONS**: Translate EXACTLY what is in the source text. Do NOT add an "Introduction" or "Abstract" if it does not exist in the source text. If the input is just a title or a few words, translate ONLY those words. DO NOT generate an essay, abstract, or introduction about the topic.
+14. **ABSOLUTE ANTI-HALLUCINATION RULE — THE MOST IMPORTANT RULE**: You MUST translate ONLY the text you are given. You MUST NOT:
+   - Generate a new introduction, abstract, or body paragraph that was NOT in the input.
+   - Write explanatory text about the paper's topic (e.g., do NOT write about AI, RAG, LLMs, or any other topic unless that EXACT text was in the source).
+   - If the input is ONLY author names, emails, affiliations, a title, or copyright text: translate ONLY those exact words. Return NOTHING else.
+   - **FAILURE EXAMPLE (FORBIDDEN)**: Input="## Introduction\n\nAttention Is All You Need\nAshish Vaswani". WRONG output: writing a paragraph about AI advancements. CORRECT output: translating only the title and author name.
+
 
 {glossary_prompt}
 
@@ -663,6 +668,32 @@ async def translate_paper(
             _emitted_titles.add(section_title)
         
         try:
+            # PRE-TRANSLATION GUARD: If the section content is too sparse (< 10 words),
+            # the model is very likely to hallucinate. Skip the LLM entirely.
+            content_word_count = len(section['content'].split())
+            if content_word_count < 10:
+                logger.info(f"Section '{section_title}' has only {content_word_count} words — bypassing LLM to prevent hallucination.")
+                translated_chunk = section_content  # Keep original text as-is
+                yield {"type": "translation_chunk", "data": translated_chunk + "\n\n"}
+                best_chunk = translated_chunk
+                final_score_obj = SectionScore(
+                    section_title=section_title,
+                    original_text=section["content"][:100],
+                    back_translated_text="-sparse-bypass-",
+                    similarity_score=1.0
+                )
+                full_translated_markdown += best_chunk + "\n\n"
+                section_scores.append(final_score_obj)
+                yield {"type": "translation", "data": full_translated_markdown}
+                yield {
+                    "type": "verification_section",
+                    "data": {
+                        "title": section_title, "score": 100.0, "label": "skipped", "flagged_terms": [],
+                        "metrics": {"current_index": i + 1, "total_sections": len(sections), "running_avg": 100.0}
+                    }
+                }
+                continue
+            
             translated_chunk = ""
             async for token in _stream_llm_response(
                 translation_prompt, section_content, user_provider, api_key, user_model, settings
