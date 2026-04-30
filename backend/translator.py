@@ -292,6 +292,130 @@ async def _get_llm_response(
         raise last_exception or Exception(f"Failed after {max_retries} attempts due to rate limits.")
 
 
+async def _stream_llm_response(
+    system_prompt: str,
+    user_content: str,
+    provider: str,
+    api_key: Optional[str],
+    model_name: Optional[str],
+    settings: Settings,
+    temperature: float = 0.1
+):
+    """Hybrid LLM streaming generator for OpenRouter, OpenAI, and Google Native."""
+    import asyncio
+    max_retries = 5
+    
+    if provider == "google" or not provider:
+        key_to_use = api_key if api_key else settings.gemini_api_key
+        model_to_use = model_name if model_name else settings.gemini_model
+        genai.configure(api_key=key_to_use)
+        model = genai.GenerativeModel(model_to_use)
+        full_prompt = f"{system_prompt}\n\n{user_content}"
+        
+        last_exception = None
+        for attempt in range(max_retries):
+            try:
+                from google.generativeai.types import HarmCategory, HarmBlockThreshold
+                safety_settings = {
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                }
+                
+                response_stream = await asyncio.wait_for(
+                    model.generate_content_async(
+                        [full_prompt],
+                        generation_config=genai.types.GenerationConfig(
+                            temperature=temperature,
+                            max_output_tokens=65536,
+                        ),
+                        safety_settings=safety_settings,
+                        stream=True
+                    ),
+                    timeout=180.0
+                )
+                
+                async for chunk in response_stream:
+                    if chunk.text:
+                        yield chunk.text
+                return # Successfully finished streaming
+                
+            except asyncio.TimeoutError:
+                last_exception = Exception("Google API call timed out after 180s.")
+                logger.warning(f"Google API timed out. Attempt {attempt+1}/{max_retries}")
+                await asyncio.sleep(5)
+            except Exception as e:
+                last_exception = e
+                err_msg = str(e).lower()
+                
+                if "finish_reason" in err_msg and ("4" in err_msg or "reciting" in err_msg):
+                    logger.warning("Gemini API blocked output due to Copyright/Recitation filters. Using original text as fallback.")
+                    yield f"\n\n> [!WARNING] **Translation Blocked**  \n> Google blocked the translation of this section because it resembles its copyrighted training data (Recitation Filter). Showing original English text instead:\n\n{user_content}\n\n"
+                    return
+                
+                if any(k in err_msg for k in ["429", "quota", "exceeded", "rate limit", "ratelimit"]) and attempt < max_retries - 1:
+                    logger.warning(f"Hit Google API quota/rate limit. Pausing 20s... (Attempt {attempt+1}/{max_retries})")
+                    await asyncio.sleep(20.0)
+                    continue
+                    
+                if any(k in err_msg for k in ["404", "not found", "invalid"]):
+                    raise e
+                    
+                wait_time = (attempt + 1) * 3
+                logger.warning(f"Google API Error. Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                await asyncio.sleep(wait_time)
+                
+        raise last_exception or Exception(f"Failed after {max_retries} attempts.")
+        
+    else:
+        # OpenAI or OpenRouter
+        base_url = "https://openrouter.ai/api/v1" if provider == "openrouter" else None
+        if not model_name:
+            model_name = "meta-llama/llama-3.1-8b-instruct:free" if provider == "openrouter" else "gpt-4o-mini"
+            
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        max_retries = 3
+        last_exception = None
+        
+        import asyncio
+        import openai
+
+        for attempt in range(max_retries):
+            try:
+                response_stream = await asyncio.wait_for(
+                    client.chat.completions.create(
+                        model=model_name,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_content}
+                        ],
+                        temperature=temperature,
+                        stream=True
+                    ),
+                    timeout=180.0
+                )
+                
+                async for chunk in response_stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
+                return # Successfully finished streaming
+                
+            except asyncio.TimeoutError:
+                last_exception = Exception(f"API call to {provider} timed out after 180s.")
+                logger.warning(f"{provider} API timed out. Attempt {attempt+1}/{max_retries}")
+                await asyncio.sleep(5)
+            except openai.RateLimitError as e:
+                last_exception = e
+                wait_time = (attempt + 1) * 5
+                logger.warning(f"Rate limited by {provider}. Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                await asyncio.sleep(wait_time)
+            except Exception as e:
+                raise e
+        
+        raise last_exception or Exception(f"Failed after {max_retries} attempts due to rate limits.")
+
+
 async def translate_paper(
     pdf_content: bytes,
     target_language: str,
@@ -375,11 +499,18 @@ async def translate_paper(
             timeout=300.0
         )
         
+        import time
+        last_yield_time = time.time()
+        
         async for chunk in response_stream:
             if chunk.text:
                 original_english_text += chunk.text
-            # Yield a small heartbeat so the frontend SSE connection doesn't time out
-            yield {"type": "status", "data": "🧠 Reading pages... please wait."}
+            
+            # Yield a small heartbeat every 5 seconds so the frontend SSE connection doesn't time out
+            current_time = time.time()
+            if current_time - last_yield_time >= 5.0:
+                yield {"type": "status", "data": "🧠 Reading pages... please wait."}
+                last_yield_time = current_time
         
         try:
             genai.delete_file(gemini_file.name)
@@ -532,9 +663,14 @@ async def translate_paper(
             _emitted_titles.add(section_title)
         
         try:
-            translated_chunk = await _get_llm_response(
+            translated_chunk = ""
+            async for token in _stream_llm_response(
                 translation_prompt, section_content, user_provider, api_key, user_model, settings
-            )
+            ):
+                translated_chunk += token
+                yield {"type": "translation_chunk", "data": token}
+            
+            yield {"type": "translation_chunk", "data": "\n\n"}
             
             if not translated_chunk:
                 raise Exception("Model returned empty translation.")
@@ -553,17 +689,15 @@ async def translate_paper(
             # Bypass rigorous verification for very short sections (like Titles, Authors, strict equations)
             if len(section['content'].split()) < 30:
                  yield {"type": "status", "data": f"✅ [{section_index_txt}] Verified: 100% (Short text bypass)."}
-                 best_chunk = translated_chunk
                  final_score_obj = SectionScore(
                      section_title=section_title, 
                      original_text=section["content"][:100], 
                      back_translated_text="-bypassed-", 
                      similarity_score=1.0
                  )
-                 full_translated_markdown += best_chunk + "\n\n"
+                 full_translated_markdown += translated_chunk + "\n\n"
                  section_scores.append(final_score_obj)
                  
-                 yield {"type": "translation", "data": full_translated_markdown}
                  yield {
                      "type": "verification_section",
                      "data": {
@@ -579,20 +713,15 @@ async def translate_paper(
             final_score_obj = None
 
             for attempt in range(1, max_attempts + 1):
-                # --- Pass 2: Back-Translate ---
                 yield {"type": "status", "data": f"🔄 [{section_index_txt}] Verifying (Attempt {attempt})..."}
                 back_chunk = await _get_llm_response(
                     back_translation_prompt, translated_chunk, user_provider, api_key, user_model, settings
                 )
                 
-                # --- Pass 3: Score Section (AI Judge Mode) ---
                 yield {"type": "status", "data": f"⚖️ [{section_index_txt}] AI Judge ({judge_provider}) is evaluating meaning... (Attempt {attempt})"}
                 
                 judge_prompt = _build_judge_prompt(section_content, back_chunk or "")
-                similarity = 0.0
-                
                 try:
-                    # Level 1: Use user-selected Judge
                     actual_judge_key = judge_api_key if judge_api_key else (api_key if judge_provider == user_provider else None)
                     
                     score_str = await _get_llm_response(
@@ -660,9 +789,15 @@ async def translate_paper(
                 
                 retranslate_sys = _build_refinement_prompt(language_name, glossary_prompt, translated_chunk)
                 
-                refined_chunk = await _get_llm_response(
+                yield {"type": "retranslation", "data": {"section": section_title}}
+                refined_chunk = ""
+                async for token in _stream_llm_response(
                     retranslate_sys, section_content, user_provider, api_key, user_model, settings, temperature=0.2
-                )
+                ):
+                    refined_chunk += token
+                    yield {"type": "translation_chunk", "data": token}
+                
+                yield {"type": "translation_chunk", "data": "\n\n"}
                 
                 if refined_chunk:
                     translated_chunk = refined_chunk.translate(str.maketrans('০১২৩৪৫৬৭৮৯', '0123456789'))
