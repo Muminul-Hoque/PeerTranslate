@@ -790,10 +790,6 @@ async def translate_paper(
                 retranslate_sys = _build_refinement_prompt(language_name, glossary_prompt, translated_chunk)
                 
                 yield {"type": "retranslation", "data": {"section": section_title}}
-                
-                # Reset UI to erase the bad Pass 1 text before streaming the refined Pass 4 text
-                yield {"type": "translation", "data": full_translated_markdown}
-                
                 refined_chunk = ""
                 async for token in _stream_llm_response(
                     retranslate_sys, section_content, user_provider, api_key, user_model, settings, temperature=0.2
@@ -812,8 +808,8 @@ async def translate_paper(
             full_translated_markdown += best_chunk + "\n\n"
             section_scores.append(final_score_obj)
             
-            # Sync the UI with the final normalized text for this section
-            yield {"type": "translation", "data": full_translated_markdown}
+            # Update UI with the final chunk for this section
+            yield {"type": "translation_chunk", "data": best_chunk + "\n\n"}
             
             # Update UI with final accuracy card
             yield {
