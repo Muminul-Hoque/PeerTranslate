@@ -808,8 +808,10 @@ async def translate_paper(
             full_translated_markdown += best_chunk + "\n\n"
             section_scores.append(final_score_obj)
             
-            # Update UI with the final chunk for this section
-            yield {"type": "translation_chunk", "data": best_chunk + "\n\n"}
+            # Sync UI with the final, post-processed text (numeral normalization etc.)
+            # Using 'translation' (replace) not 'translation_chunk' (append) to prevent
+            # duplication since Pass 1 already streamed the raw tokens to the screen.
+            yield {"type": "translation", "data": full_translated_markdown}
             
             # Update UI with final accuracy card
             yield {
