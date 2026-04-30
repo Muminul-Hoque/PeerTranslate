@@ -370,12 +370,16 @@ async def translate_paper(
         if gemini_file.state.name == 'FAILED':
             raise Exception("Gemini failed to process the uploaded PDF.")
         
-        response = await asyncio.wait_for(
-            model.generate_content_async([gemini_file, prompt]),
+        response_stream = await asyncio.wait_for(
+            model.generate_content_async([gemini_file, prompt], stream=True),
             timeout=300.0
         )
         
-        original_english_text = response.text
+        async for chunk in response_stream:
+            if chunk.text:
+                original_english_text += chunk.text
+            # Yield a small heartbeat so the frontend SSE connection doesn't time out
+            yield {"type": "status", "data": "🧠 Reading pages... please wait."}
         
         try:
             genai.delete_file(gemini_file.name)
