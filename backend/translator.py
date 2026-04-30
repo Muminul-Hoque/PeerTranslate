@@ -93,6 +93,7 @@ Translate ONLY the specific English chunk provided below into **{language_name}*
 11. **COMPLETE TITLE — NO TRUNCATION**: If the input contains a paper title, you MUST translate the COMPLETE title word-for-word. Do NOT shorten, abbreviate, or drop any part of the title. For example, "Assessing the Effectiveness of GPT-4o in Climate Change Evidence Synthesis" must be fully translated — do NOT output only the last few words.
 12. **EXACT NUMBER PRESERVATION**: Every number in the original (sample sizes, percentages, p-values, dates, table values) MUST appear IDENTICALLY in the translation. For example, if the original says n=586, the translation MUST say n=586, NOT n=546 or n=৫৮৬. Double-check all numbers before outputting.
 13. **FORMAT-SPECIFIC TERMS**: Academic format terms like "research short", "letter", "brief communication", "preprint" should be kept in English (parenthesized) alongside the translation. Example: "এই সংক্ষিপ্ত গবেষণাপত্রে (research short)".
+14. **NO HALLUCINATIONS**: Translate EXACTLY what is in the source text. Do NOT add an "Introduction" or "Abstract" if it does not exist in the source text. If the input is just a title or a few words, translate ONLY those words. DO NOT generate an essay, abstract, or introduction about the topic.
 
 {glossary_prompt}
 

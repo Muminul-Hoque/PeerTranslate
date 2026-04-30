@@ -278,9 +278,7 @@
             <div class="translation-output">
                 <div class="output-header">
                     <span class="output-title">📝 Translated Paper</span>
-                    <div class="view-toggle" id="view-toggle" style="display: none; margin-left: 1rem; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 2px;">
-                        <button class="toggle-btn active" id="view-text-btn" style="border:none; background:var(--accent-cyan); color:#000; border-radius:4px; padding:4px 12px; font-size:0.8rem; font-weight:bold; cursor:pointer;">📝 Text</button>
-                        <button class="toggle-btn" id="view-pdf-btn" style="border:none; background:transparent; color:var(--text-secondary); border-radius:4px; padding:4px 12px; font-size:0.8rem; font-weight:bold; cursor:pointer; transition:0.2s;">📄 Magic PDF</button>
+                    <div class="view-toggle" id="view-toggle" style="display: none;">
                     </div>
                     <div class="output-actions" style="margin-left: auto;">
                         <button class="action-btn" id="sidebyside-btn" style="display:none;">📖 Side-by-Side</button>
@@ -293,11 +291,11 @@
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
                         <div>
                             <div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">🇬🇧 Original English</div>
-                            <div class="output-body" id="original-body" style="height:600px;overflow-y:auto;"></div>
+                            <div class="output-body" id="original-body" style="height:80vh;overflow-y:auto;background:var(--bg-card);padding:2rem;border-radius:var(--radius-md);"></div>
                         </div>
                         <div>
                             <div style="font-size:0.75rem;font-weight:700;color:var(--accent-cyan);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">🌐 Translation</div>
-                            <div class="output-body" id="output-body-sidebyside" style="height:600px;overflow-y:auto;"></div>
+                            <div class="output-body" id="output-body-sidebyside" style="height:80vh;overflow-y:auto;background:var(--bg-card);padding:2rem;border-radius:var(--radius-md);"></div>
                         </div>
                     </div>
                 </div>
@@ -308,15 +306,7 @@
                     </p>
                 </div>
 
-                <!-- Inline PDF Viewer -->
-                <div id="pdf-viewer-container" style="display:none; height: 800px; width: 100%; border: 1px solid var(--border-glass); border-radius: var(--radius-md); overflow: hidden; background: #fff;">
-                    <div id="pdf-loading-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #666; background: #1a1a1a;">
-                        <div style="font-size:2rem;margin-bottom:1rem;animation:spin 2s linear infinite;">⚙️</div>
-                        <div style="font-weight:600;">Generating Layout-Preserved PDF...</div>
-                        <div style="font-size:0.85rem; margin-top: 0.5rem;">This may take a few seconds.</div>
-                    </div>
-                    <iframe id="pdf-iframe" style="width: 100%; height: 100%; border: none; display: none;"></iframe>
-                </div>
+                <!-- Inline PDF Viewer Removed -->
 
                 <!-- Download & Flag Actions -->
                 <div class="download-actions" id="download-actions" style="display: none;">
