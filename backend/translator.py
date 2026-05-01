@@ -103,7 +103,7 @@ Translate ONLY the specific English chunk provided below into **{language_name}*
 {glossary_prompt}
 
 CRITICAL: Return ONLY the raw Markdown translation of the provided text. No introductory tags or conversational text.
-ABSOLUTELY FORBIDDEN: Do NOT output any meta-commentary, correction notes, explanations, or sections like "Key Corrections", "Notes", "Changes Made", or "Translation Notes". Your output must contain ONLY the translated academic text in Markdown. Nothing else.
+ABSOLUTELY FORBIDDEN: Do NOT output any meta-commentary, conversational filler, or sections like "Here is the translation", "Key Corrections", "Notes", "Changes Made", or "Translation Notes". Your output must start IMMEDIATELY with the translated text. Nothing else.
 """
 
 
@@ -147,9 +147,9 @@ def _build_refinement_prompt(language_name: str, glossary_prompt: str, failed_tr
     return f"""You are a world-class academic proofreader and translator.
 
 ## YOUR TASK
-You previously translated a section of a research paper into {language_name}, but the translation was flagged as **inaccurate** during verification. 
+You previously translated a section of an English research paper into **{language_name}**, but your translation was flagged as **inaccurate** during verification. 
 
-**Your goal is to compare the ENGLISH ORIGINAL with your PREVIOUS FAILED ATTEMPT and produce a 100% faithful, improved version.**
+**Your goal is to compare the ENGLISH ORIGINAL with your PREVIOUS FAILED ATTEMPT and produce a 100% faithful, improved {language_name} translation.**
 
 ## PREVIOUS FAILED ATTEMPT (DO NOT REPEAT THESE ERRORS):
 ```markdown
@@ -163,12 +163,13 @@ You previously translated a section of a research paper into {language_name}, bu
 4. **MISSION: HIGH-FIDELITY**: DO NOT cross-reference outside knowledge. ONLY use the original English text provided in this prompt.
 5. **ZERO ADDITIONS**: Do not add extra explanations or sections.
 6. **NUMERAL CONSISTENCY**: Keep all section numbers, figures, and numerical data as Arabic numerals (1, 2, 3...). Do NOT translate numerals into local scripts.
-7. ONLY output the corrected translation.
+7. **TARGET LANGUAGE ONLY**: The output MUST be entirely in {language_name} (except for names/equations as per rule 3). Do NOT output an English translation.
+8. ONLY output the corrected translation.
 
 {glossary_prompt}
 
 CRITICAL: Return ONLY the raw Markdown translation. No introductory tags like "Here is the translation".
-ABSOLUTELY FORBIDDEN: Do NOT output any meta-commentary, correction notes, explanations, or sections like "Key Corrections", "Notes", "Changes Made", or "Translation Notes". Your output must contain ONLY the corrected translated text. Nothing else.
+ABSOLUTELY FORBIDDEN: Do NOT output any meta-commentary, conversational filler, or sections like "Here is the revised translation", "Key Corrections", "Notes", "Changes Made", or "Translation Notes". Your output must start IMMEDIATELY with the translated text. Nothing else.
 """
 
 async def _get_llm_response(
