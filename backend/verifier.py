@@ -239,19 +239,46 @@ def split_into_sections(text: str) -> List[Dict[str, str]]:
                 if not stripped_p:
                     continue
                 
-                # If adding this paragraph pushes us over the limit, flush the current chunk
-                if current_length + len(stripped_p) > MAX_CHARS and current_chunk:
-                    safe_sections.append({
-                        "title": sec["title"],
-                        "content": "\n\n".join(current_chunk),
-                        "_chunk_index": part_index,
-                    })
-                    part_index += 1
-                    current_chunk = []
-                    current_length = 0
+                # If a single paragraph is STILL larger than MAX_CHARS, force-split it
+                sub_paragraphs = []
+                if len(stripped_p) > MAX_CHARS:
+                    # Try splitting by sentence endings
+                    sentences = re.split(r'(?<=[.!?])\s+', stripped_p)
+                    temp_p = ""
+                    for s in sentences:
+                        if len(s) > MAX_CHARS:
+                            # Still too big! Force split by space
+                            words = s.split()
+                            for w in words:
+                                if len(temp_p) + len(w) > MAX_CHARS and temp_p:
+                                    sub_paragraphs.append(temp_p.strip())
+                                    temp_p = w + " "
+                                else:
+                                    temp_p += w + " "
+                        elif len(temp_p) + len(s) > MAX_CHARS and temp_p:
+                            sub_paragraphs.append(temp_p.strip())
+                            temp_p = s + " "
+                        else:
+                            temp_p += s + " "
+                    if temp_p:
+                        sub_paragraphs.append(temp_p.strip())
+                else:
+                    sub_paragraphs = [stripped_p]
                 
-                current_chunk.append(stripped_p)
-                current_length += len(stripped_p)
+                for sp in sub_paragraphs:
+                    # If adding this sub-paragraph pushes us over the limit, flush the current chunk
+                    if current_length + len(sp) > MAX_CHARS and current_chunk:
+                        safe_sections.append({
+                            "title": sec["title"],
+                            "content": "\n\n".join(current_chunk),
+                            "_chunk_index": part_index,
+                        })
+                        part_index += 1
+                        current_chunk = []
+                        current_length = 0
+                    
+                    current_chunk.append(sp)
+                    current_length += len(sp)
                 
             # Append remaining chunk
             if current_chunk:

@@ -862,6 +862,16 @@ async def translate_paper(
                     flagged_terms=flagged
                 )
 
+                # ANTI-ENGLISH LOOPHOLE:
+                # If the translation output is just the original English text (similarity > 0.85),
+                # the AI Judge will mistakenly give it 100% because English -> BackTranslate -> English is a perfect match.
+                # We must penalize this unless the text is very short (e.g. < 100 chars).
+                eng_sim = compute_similarity(section_content, translated_chunk)
+                if eng_sim > 0.85 and len(section_content) > 100:
+                    logger.warning(f"Anti-English Loophole Triggered: Translation is {round(eng_sim*100)}% identical to original English! Forcing score to 0.")
+                    similarity = 0.0
+                    score_obj.similarity_score = 0.0
+
                 # Update best result if this is better or first
                 if similarity > best_similarity or final_score_obj is None:
                     best_similarity = similarity
