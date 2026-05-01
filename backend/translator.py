@@ -421,19 +421,6 @@ async def _stream_llm_response(
         raise last_exception or Exception(f"Failed after {max_retries} attempts due to rate limits.")
 
 
-async def translate_paper(
-    pdf_content: bytes,
-    target_language: str,
-    settings: Settings,
-    api_key: Optional[str] = None,
-    user_model: Optional[str] = None,
-    user_provider: str = "google",
-    judge_provider: str = "google",
-    judge_model: Optional[str] = None,
-    judge_api_key: Optional[str] = None,
-    quick_mode: bool = False,
-) -> AsyncGenerator[Dict[str, Any], None]:
-
 
 def _structure_raw_text_as_markdown(raw_text: str) -> str:
     """
