@@ -218,9 +218,10 @@ def split_into_sections(text: str) -> List[Dict[str, str]]:
     # ---------------------------------------------------------
     # SAFETY CHUNKER
     # ---------------------------------------------------------
-    # Prevent massive LLM payloads by splitting any section > 5000 chars.
+    # Prevent massive LLM payloads by splitting any section > 1800 chars.
+    # Smaller chunks (1800 chars ~ 400 words) are much faster for the 4-pass pipeline.
     safe_sections = []
-    MAX_CHARS = 5000
+    MAX_CHARS = 1800
     
     for sec in sections:
         content_len = len(sec["content"])
