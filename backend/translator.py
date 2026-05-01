@@ -711,7 +711,6 @@ async def translate_paper(
             if content_word_count < 10:
                 logger.info(f"Section '{section_title}' has only {content_word_count} words — bypassing LLM to prevent hallucination.")
                 translated_chunk = section_content  # Keep original text as-is
-                yield {"type": "translation_chunk", "data": translated_chunk + "\n\n"}
                 best_chunk = translated_chunk
                 final_score_obj = SectionScore(
                     section_title=section_title,
@@ -736,9 +735,6 @@ async def translate_paper(
                 translation_prompt, section_content, user_provider, api_key, user_model, settings
             ):
                 translated_chunk += token
-                yield {"type": "translation_chunk", "data": token}
-            
-            yield {"type": "translation_chunk", "data": "\n\n"}
             
             if not translated_chunk:
                 raise Exception("Model returned empty translation.")
@@ -785,6 +781,7 @@ async def translate_paper(
                  full_translated_markdown += translated_chunk + "\n\n"
                  section_scores.append(final_score_obj)
                  
+                 yield {"type": "translation", "data": full_translated_markdown}
                  yield {
                      "type": "verification_section",
                      "data": {
@@ -794,7 +791,7 @@ async def translate_paper(
                  }
                  continue
 
-            max_attempts = 5
+            max_attempts = 3
             best_similarity = 0.0
             best_chunk = translated_chunk
             final_score_obj = None
@@ -805,7 +802,7 @@ async def translate_paper(
                     back_translation_prompt, translated_chunk, user_provider, api_key, user_model, settings
                 )
                 
-                yield {"type": "status", "data": f"⚖️ [{section_index_txt}] AI Judge ({judge_provider}) is evaluating meaning... (Attempt {attempt})"}
+                yield {"type": "status", "data": f"⚖️ [{section_index_txt}] AI Judge scoring... (Attempt {attempt})"}
                 
                 judge_prompt = _build_judge_prompt(section_content, back_chunk or "")
                 try:
@@ -825,7 +822,7 @@ async def translate_paper(
                     similarity = float(match.group(1)) / 100.0 if match else 0.0
                 except Exception as e1:
                     logger.warning(f"Level 1 Judge failed ({judge_provider}): {e1}")
-                    yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Custom Judge failed. Recovering with Server-Side Gemini..."}
+                    yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Judge failed. Using fallback..."}
                     
                     try:
                         # Level 2: Use Server-Side Google Gemini fallback
@@ -843,7 +840,7 @@ async def translate_paper(
                         similarity = float(match.group(1)) / 100.0 if match else 0.0
                     except Exception as e2:
                         logger.error(f"Level 2 Judge failed (Google): {e2}")
-                        yield {"type": "status", "data": f"⚠️ [{section_index_txt}] AI Verification unreachable. Using literal math baseline..."}
+                        yield {"type": "status", "data": f"⚠️ [{section_index_txt}] AI Judge unreachable. Using math baseline..."}
                         # Level 3: Final Resort - Literal Matching
                         similarity = compute_similarity(section_content, back_chunk or "")
                 
@@ -863,30 +860,31 @@ async def translate_paper(
                     best_chunk = translated_chunk
                     final_score_obj = score_obj
 
-                # If confident or last attempt, we're done with this section
-                if score_obj.is_confident or attempt == max_attempts:
-                    if not score_obj.is_confident:
-                         yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Final accuracy: {round(similarity*100)}%. Proceeding..."}
-                    else:
-                         yield {"type": "status", "data": f"✅ [{section_index_txt}] Verified: {round(similarity*100)}%."}
+                # ≥95% — PASSED! Show it and move on
+                if score_obj.is_confident:
+                    yield {"type": "status", "data": f"✅ [{section_index_txt}] Verified: {round(similarity*100)}% — PASSED."}
                     break
                 
-                # --- Pass 4: Ultra-Precision Refinement (Triggered if low confidence) ---
-                yield {"type": "status", "data": f"🛠️ [{section_index_txt}] Accuracy too low ({round(similarity*100)}%). Error Correction Mode active..."}
+                # Last attempt — accept best we have
+                if attempt == max_attempts:
+                    yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Best accuracy: {round(best_similarity*100)}%. Showing best attempt."}
+                    break
+                
+                # --- Pass 4: Silent Refinement (score < 95%) ---
+                yield {"type": "status", "data": f"🛠️ [{section_index_txt}] Score {round(similarity*100)}% < 95%. Refining silently..."}
                 
                 retranslate_sys = _build_refinement_prompt(language_name, glossary_prompt, translated_chunk)
                 
-                yield {"type": "retranslation", "data": {"section": section_title}}
                 refined_chunk = ""
                 async for token in _stream_llm_response(
                     retranslate_sys, section_content, user_provider, api_key, user_model, settings, temperature=0.2
                 ):
                     refined_chunk += token
-                    # DO NOT stream refinement tokens — only the final best version is shown
-                    # This prevents confusing duplicate text appearing on screen
                 
                 if refined_chunk:
+                    # Clean and replace
                     translated_chunk = refined_chunk.translate(str.maketrans('০১২৩৪৫৬৭৮৯', '0123456789'))
+                    translated_chunk = reasoning_pattern.sub('', translated_chunk).rstrip()
                 else:
                     break # Cannot refine if model gives empty response
 

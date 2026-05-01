@@ -26,7 +26,7 @@ class SectionScore:
     @property
     def is_confident(self) -> bool:
         """Check if the section meets the confidence threshold."""
-        return self.similarity_score >= 0.90
+        return self.similarity_score >= 0.95
 
     @property
     def confidence_label(self) -> str:
@@ -218,10 +218,10 @@ def split_into_sections(text: str) -> List[Dict[str, str]]:
     # ---------------------------------------------------------
     # SAFETY CHUNKER
     # ---------------------------------------------------------
-    # Prevent massive LLM payloads by splitting any section > 1800 chars.
-    # Smaller chunks (1800 chars ~ 400 words) are much faster for the 4-pass pipeline.
+    # Prevent massive LLM payloads by splitting any section > 1000 chars.
+    # Paragraph-level chunks (~1000 chars ~ 200 words) for maximum accuracy and speed.
     safe_sections = []
-    MAX_CHARS = 1800
+    MAX_CHARS = 1000
     
     for sec in sections:
         content_len = len(sec["content"])
