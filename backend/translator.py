@@ -328,6 +328,11 @@ async def _stream_llm_response(
                     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
                 }
                 
+                # Rate limit protection for Free Tier users (15 RPM limit)
+                # We add a small delay before every Google call to ensure we don't burst too fast
+                if provider == "google":
+                    await asyncio.sleep(4.0)
+
                 response_stream = await asyncio.wait_for(
                     model.generate_content_async(
                         [full_prompt],
@@ -654,6 +659,9 @@ async def translate_paper(
     _emitted_titles = set()  # Track which section titles have already been emitted as headings
     
     for i, section in enumerate(sections):
+        # Added a short delay between sections to further protect API quota
+        if i > 0:
+            await asyncio.sleep(2.0)
 
         section_title = section["title"]
         section_index_txt = f"{i+1}/{len(sections)}"
