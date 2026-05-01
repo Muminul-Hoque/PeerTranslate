@@ -282,19 +282,19 @@ async def _get_llm_response(
                 )
                 return response.choices[0].message.content
             except asyncio.TimeoutError:
-                last_exception = Exception(f"API call to {provider} timed out after 180s. Possible rate_limit or server overload.")
+                last_exception = Exception(f"API call to {provider} timed out after 180s.")
                 logger.warning(f"{provider} API timed out. Attempt {attempt+1}/{max_retries}")
                 await asyncio.sleep(5)
             except openai.RateLimitError as e:
                 last_exception = e
                 wait_time = (attempt + 1) * 5 # Wait 5s, 10s...
-                logger.warning(f"Rate limited by {provider} (429/rate_limit). Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                logger.warning(f"Rate limited by {provider} (429). Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
                 await asyncio.sleep(wait_time)
             except Exception as e:
                 # Immediate fail for non-429 errors
                 raise e
         
-        raise last_exception or Exception(f"Failed after {max_retries} attempts due to rate limits.")
+        raise last_exception or Exception(f"Failed after {max_retries} attempts.")
 
 
 async def _stream_llm_response(
@@ -423,7 +423,7 @@ async def _stream_llm_response(
             except Exception as e:
                 raise e
         
-        raise last_exception or Exception(f"Failed after {max_retries} attempts due to rate limits.")
+        raise last_exception or Exception(f"Failed after {max_retries} attempts.")
 
 
 
@@ -910,9 +910,9 @@ async def translate_paper(
             err_str = str(e).lower()
             
             # If the API key is exhausted, abort the whole pipeline rather than failing every section
-            is_quota = any(k in err_str for k in ["quota", "429", "rate_limit", "ratelimit"])
-            # Be careful: "exceeded" might just be a safety threshold, don't abort for that!
-            if is_quota:
+            # ONLY abort for genuine 429 status codes, not generic error messages
+            is_genuine_quota = "429" in err_str or ("ratelimiterror" in err_str.replace(" ", "").replace("_", ""))
+            if is_genuine_quota:
                 error_body = (
                     f"❌ API Quota Exhausted while translating '{section_title}'. "
                     f"Your '{user_provider.upper()}' key has hit its rate limit. "
