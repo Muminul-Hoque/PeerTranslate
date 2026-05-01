@@ -424,92 +424,87 @@ async def _stream_llm_response(
 
 def _structure_raw_text_as_markdown(raw_text: str) -> str:
     """
-    Post-processes raw text extracted by PyMuPDF (fitz) to add basic Markdown
-    heading markers (## for sections, ### for subsections).
-    
-    PyMuPDF outputs plain text with no structure — this heuristic restores it
-    so that split_into_sections() can correctly split the document.
+    Post-processes raw PyMuPDF text to inject '## ' Markdown heading markers
+    so that split_into_sections() (which only splits on # and ##) works correctly.
+
+    Key problems this solves:
+    1. 2-column PDF layouts where section numbers appear alone on one line
+       and the title appears on the next line (e.g. "2\nBackground").
+    2. Numbered headings on a single line (e.g. "3 Related Work").
+    3. Well-known academic section names appearing alone on a line.
+
+    IMPORTANT: Only emits ## (H2) markers because split_into_sections
+    only triggers on # and ## lines.
     """
     import re
-    
-    # Well-known academic section names (case-insensitive)
+
+    # Well-known academic section names (case-insensitive exact match)
     KNOWN_SECTIONS = {
         'abstract', 'introduction', 'conclusion', 'conclusions', 'related work',
-        'background', 'method', 'methods', 'methodology', 'experiments',
-        'experiment', 'results', 'result', 'discussion', 'discussions',
-        'acknowledgment', 'acknowledgments', 'acknowledgements', 'references',
-        'appendix', 'evaluation', 'approach', 'system', 'analysis',
+        'related works', 'background', 'method', 'methods', 'methodology',
+        'experiments', 'experiment', 'results', 'result', 'discussion',
+        'discussions', 'acknowledgment', 'acknowledgments', 'acknowledgements',
+        'references', 'appendix', 'evaluation', 'approach', 'analysis',
         'dataset', 'datasets', 'model', 'training', 'inference', 'setup',
         'framework', 'architecture', 'implementation', 'limitations',
-        'future work', 'related works',
+        'future work', 'preliminaries', 'notation', 'overview',
     }
-    
+
     lines = raw_text.split('\n')
     result = []
     i = 0
-    
+
     while i < len(lines):
         line = lines[i]
         stripped = line.strip()
-        
+
         if not stripped:
             result.append(line)
             i += 1
             continue
-        
-        # Pattern 1: Number-only line (e.g. "2") followed by a short title (e.g. "Background")
-        # Common in 2-column LaTeX PDFs where column layout splits number from title
+
+        # Pattern 1: Number-only line followed by title on next line (2-column fix)
         num_only = re.match(r'^(\d+\.?\d*\.?)\s*$', stripped)
         if num_only and i + 1 < len(lines):
             next_stripped = lines[i + 1].strip()
-            # Next line is short, not a sentence (no period at end), and starts with capital
-            if next_stripped and len(next_stripped) < 90 and not next_stripped.endswith('.'):
-                combined = f'## {stripped} {next_stripped}'
-                result.append(combined)
+            next_words = next_stripped.split()
+            if (
+                next_stripped and
+                len(next_stripped) <= 60 and
+                not next_stripped.endswith('.') and
+                next_stripped[0].isupper() and
+                len(next_words) <= 8 and
+                not re.search(r'\b(the|a|an|is|are|was|were|have|has|we|our|this|these|that)\b',
+                              next_stripped, re.IGNORECASE)
+            ):
+                result.append(f'## {stripped} {next_stripped}')
                 i += 2
                 continue
-        
-        # Pattern 2: Numbered section heading on a single line e.g. "3 Related Work" or "3.1 Dataset"
-        numbered_heading = re.match(r'^(\d+\.?\d*\.?)\s+([A-Z][^.]{2,70})$', stripped)
+
+        # Pattern 2: Numbered section heading on single line
+        numbered_heading = re.match(r'^(\d+\.?\d*\.?)\s+([A-Z][^\n]{2,60})$', stripped)
         if numbered_heading:
-            # Check it's not just a sentence starting with a number like "3 papers were tested"
-            title_part = numbered_heading.group(2)
-            # Real headings: short, title-case or upper-case, no common sentence words
-            is_likely_heading = (
-                len(title_part.split()) <= 8 or
-                title_part.lower().rstrip(':') in KNOWN_SECTIONS
-            )
-            if is_likely_heading:
+            title_part = numbered_heading.group(2).strip()
+            title_words = title_part.split()
+            if (
+                len(title_words) <= 8 and
+                not title_part.endswith('.') and
+                not re.search(r'\b(the|a|an|is|are|was|were|have|has|we|our|this|these|that)\b',
+                              title_part, re.IGNORECASE)
+            ):
                 result.append(f'## {stripped}')
                 i += 1
                 continue
-        
-        # Pattern 3: Known academic section name alone on a line (case-insensitive)
-        if stripped.lower().rstrip(':') in KNOWN_SECTIONS and len(stripped) < 60:
+
+        # Pattern 3: Known academic section name alone
+        if stripped.lower().rstrip(':') in KNOWN_SECTIONS and len(stripped) <= 60:
             result.append(f'## {stripped}')
             i += 1
             continue
-        
-        # Pattern 4: Short, title-case line that looks like a subsection heading
-        # (< 6 words, title-case, no period at end, not all-caps abbreviation)
-        words = stripped.split()
-        if (
-            2 <= len(words) <= 6 and
-            not stripped.endswith('.') and
-            not stripped.endswith(',') and
-            not re.search(r'[\[\](){}]', stripped) and  # not a citation
-            words[0][0].isupper() and
-            len(stripped) < 60
-        ):
-            # Additional check: not a citation reference or affiliation
-            if not re.match(r'^[A-Z][a-z]+\s+(et al|[A-Z][a-z]+),?\s+\d', stripped):
-                result.append(f'### {stripped}')
-                i += 1
-                continue
-        
+
         result.append(line)
         i += 1
-    
+
     return '\n'.join(result)
 
 
