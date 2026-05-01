@@ -754,10 +754,17 @@ async def translate_paper(
                 flags=_re.MULTILINE
             )
             
-            # Strip LLM reasoning/meta-commentary that leaks through despite prompt rules
-            # Look for patterns like "### Key Corrections:", "**Notes:**", "Changes Made:" etc.
+            # Strip conversational filler at the start (e.g., "Here is the translation...")
+            translated_chunk = _re.sub(
+                r'^(?:\*\*)?(?:Here (?:is|are) the|Here\'s the|Below is the|The revised|This is the)[^\n]*\n+(?:---\n+)?', 
+                '', 
+                translated_chunk, 
+                flags=_re.IGNORECASE
+            )
+            
+            # Strip LLM reasoning/meta-commentary at the end (e.g., "Key Corrections:", "**Notes:**")
             reasoning_pattern = _re.compile(
-                r'\n+\s*(?:#{1,4}\s*)?(?:\*{0,2})(?:Key Corrections|Notes|Changes Made|Translation Notes|Corrections|Summary of Changes|Here (?:is|are) the).*',
+                r'\n+(?:---\n+)?\s*(?:#{1,4}\s*)?(?:\*{0,2})(?:Key Corrections|Notes|Changes Made|Translation Notes|Corrections|Summary of Changes|Please note):?.*',
                 flags=_re.IGNORECASE | _re.DOTALL
             )
             translated_chunk = reasoning_pattern.sub('', translated_chunk).rstrip()
@@ -885,6 +892,12 @@ async def translate_paper(
                 if refined_chunk:
                     # Clean and replace
                     translated_chunk = refined_chunk.translate(str.maketrans('০১২৩৪৫৬৭৮৯', '0123456789'))
+                    translated_chunk = _re.sub(
+                        r'^(?:\*\*)?(?:Here (?:is|are) the|Here\'s the|Below is the|The revised|This is the)[^\n]*\n+(?:---\n+)?', 
+                        '', 
+                        translated_chunk, 
+                        flags=_re.IGNORECASE
+                    )
                     translated_chunk = reasoning_pattern.sub('', translated_chunk).rstrip()
                 else:
                     break # Cannot refine if model gives empty response
