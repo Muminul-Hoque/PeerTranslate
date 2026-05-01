@@ -278,11 +278,11 @@ async def _get_llm_response(
                         ],
                         temperature=temperature
                     ),
-                    timeout=180.0
+                    timeout=45.0
                 )
                 return response.choices[0].message.content
             except asyncio.TimeoutError:
-                last_exception = Exception(f"API call to {provider} timed out after 180s.")
+                last_exception = Exception(f"API call to {provider} timed out after 45s.")
                 logger.warning(f"{provider} API timed out. Attempt {attempt+1}/{max_retries}")
                 await asyncio.sleep(5)
             except openai.RateLimitError as e:
@@ -343,7 +343,7 @@ async def _stream_llm_response(
                         safety_settings=safety_settings,
                         stream=True
                     ),
-                    timeout=180.0
+                    timeout=45.0
                 )
                 
                 async for chunk in response_stream:
@@ -352,7 +352,7 @@ async def _stream_llm_response(
                 return # Successfully finished streaming
                 
             except asyncio.TimeoutError:
-                last_exception = Exception("Google API call timed out after 180s.")
+                last_exception = Exception("Google API call timed out after 45s.")
                 logger.warning(f"Google API timed out. Attempt {attempt+1}/{max_retries}")
                 await asyncio.sleep(5)
             except Exception as e:
@@ -365,8 +365,8 @@ async def _stream_llm_response(
                     return
                 
                 if any(k in err_msg for k in ["429", "quota", "exceeded", "rate limit", "ratelimit"]) and attempt < max_retries - 1:
-                    logger.warning(f"Hit Google API quota/rate limit. Pausing 20s... (Attempt {attempt+1}/{max_retries})")
-                    await asyncio.sleep(20.0)
+                    logger.warning(f"Hit Google API quota/rate limit. Pausing 5s... (Attempt {attempt+1}/{max_retries})")
+                    await asyncio.sleep(5.0)
                     continue
                     
                 if any(k in err_msg for k in ["404", "not found", "invalid"]):
@@ -385,7 +385,7 @@ async def _stream_llm_response(
             model_name = "meta-llama/llama-3.1-8b-instruct:free" if provider == "openrouter" else "gpt-4o-mini"
             
         client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        max_retries = 3
+        max_retries = 2
         last_exception = None
         
         import asyncio
@@ -403,7 +403,7 @@ async def _stream_llm_response(
                         temperature=temperature,
                         stream=True
                     ),
-                    timeout=180.0
+                    timeout=45.0
                 )
                 
                 async for chunk in response_stream:
@@ -412,7 +412,7 @@ async def _stream_llm_response(
                 return # Successfully finished streaming
                 
             except asyncio.TimeoutError:
-                last_exception = Exception(f"API call to {provider} timed out after 180s.")
+                last_exception = Exception(f"API call to {provider} timed out after 45s.")
                 logger.warning(f"{provider} API timed out. Attempt {attempt+1}/{max_retries}")
                 await asyncio.sleep(5)
             except openai.RateLimitError as e:
