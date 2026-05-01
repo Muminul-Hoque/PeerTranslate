@@ -103,6 +103,7 @@ Translate ONLY the specific English chunk provided below into **{language_name}*
 {glossary_prompt}
 
 CRITICAL: Return ONLY the raw Markdown translation of the provided text. No introductory tags or conversational text.
+ABSOLUTELY FORBIDDEN: Do NOT output any meta-commentary, correction notes, explanations, or sections like "Key Corrections", "Notes", "Changes Made", or "Translation Notes". Your output must contain ONLY the translated academic text in Markdown. Nothing else.
 """
 
 
@@ -167,6 +168,7 @@ You previously translated a section of a research paper into {language_name}, bu
 {glossary_prompt}
 
 CRITICAL: Return ONLY the raw Markdown translation. No introductory tags like "Here is the translation".
+ABSOLUTELY FORBIDDEN: Do NOT output any meta-commentary, correction notes, explanations, or sections like "Key Corrections", "Notes", "Changes Made", or "Translation Notes". Your output must contain ONLY the corrected translated text. Nothing else.
 """
 
 async def _get_llm_response(
@@ -754,6 +756,14 @@ async def translate_paper(
                 translated_chunk,
                 flags=_re.MULTILINE
             )
+            
+            # Strip LLM reasoning/meta-commentary that leaks through despite prompt rules
+            # Look for patterns like "### Key Corrections:", "**Notes:**", "Changes Made:" etc.
+            reasoning_pattern = _re.compile(
+                r'\n+\s*(?:#{1,4}\s*)?(?:\*{0,2})(?:Key Corrections|Notes|Changes Made|Translation Notes|Corrections|Summary of Changes|Here (?:is|are) the).*',
+                flags=_re.IGNORECASE | _re.DOTALL
+            )
+            translated_chunk = reasoning_pattern.sub('', translated_chunk).rstrip()
 
             # Post-processing: Validate numbers from original are preserved
             translated_chunk, num_warnings = _validate_numbers(section['content'], translated_chunk)
@@ -872,9 +882,8 @@ async def translate_paper(
                     retranslate_sys, section_content, user_provider, api_key, user_model, settings, temperature=0.2
                 ):
                     refined_chunk += token
-                    yield {"type": "translation_chunk", "data": token}
-                
-                yield {"type": "translation_chunk", "data": "\n\n"}
+                    # DO NOT stream refinement tokens — only the final best version is shown
+                    # This prevents confusing duplicate text appearing on screen
                 
                 if refined_chunk:
                     translated_chunk = refined_chunk.translate(str.maketrans('০১২৩৪৫৬৭৮৯', '0123456789'))
