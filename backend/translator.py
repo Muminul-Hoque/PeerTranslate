@@ -409,9 +409,15 @@ async def _stream_llm_response(
                     timeout=45.0
                 )
                 
+                yielded_any = False
                 async for chunk in response_stream:
                     if chunk.choices and chunk.choices[0].delta.content:
+                        yielded_any = True
                         yield chunk.choices[0].delta.content
+                        
+                if not yielded_any:
+                    raise Exception("OpenRouter returned an empty response stream (likely overloaded).")
+                    
                 return # Successfully finished streaming
                 
             except asyncio.TimeoutError:
@@ -423,8 +429,17 @@ async def _stream_llm_response(
                 wait_time = (attempt + 1) * 5
                 logger.warning(f"Rate limited by {provider}. Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
                 await asyncio.sleep(wait_time)
+            except openai.APIError as e:
+                last_exception = e
+                logger.warning(f"API Error from {provider} (e.g. 502 Bad Gateway). Retrying... (Attempt {attempt+1}/{max_retries})")
+                await asyncio.sleep(5)
             except Exception as e:
-                raise e
+                if "empty response stream" in str(e).lower():
+                    last_exception = e
+                    logger.warning(f"Empty response stream from {provider}. Retrying... (Attempt {attempt+1}/{max_retries})")
+                    await asyncio.sleep(5)
+                else:
+                    raise e
         
         raise last_exception or Exception(f"Failed after {max_retries} attempts.")
 
