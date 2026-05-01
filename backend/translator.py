@@ -308,7 +308,7 @@ async def _stream_llm_response(
 ):
     """Hybrid LLM streaming generator for OpenRouter, OpenAI, and Google Native."""
     import asyncio
-    max_retries = 5
+    max_retries = 2
     
     if provider == "google" or not provider:
         key_to_use = api_key if api_key else settings.gemini_api_key
@@ -692,6 +692,7 @@ async def translate_paper(
         
         # --- Pass 1: Translate ---
         yield {"type": "status", "data": f"⏳ [{section_index_txt}] Translating: {section_title}..."}
+        yield {"type": "status", "data": f"🔗 [{section_index_txt}] Connecting to {user_provider.upper()} API..."}
         
         # For chunked sections: only include heading for the first chunk
         is_continuation = section_title in _emitted_titles
@@ -906,8 +907,11 @@ async def translate_paper(
             }
 
         except Exception as e:
-            logger.error(f"Error in section {section_title}: {e}")
+            logger.error(f"Error in section {section_title}: {e}", exc_info=True)
             err_str = str(e).lower()
+            
+            # ALWAYS send the real error to the frontend so the user sees what happened
+            yield {"type": "status", "data": f"❌ [{section_index_txt}] Error: {str(e)[:200]}"}
             
             # If the API key is exhausted, abort the whole pipeline rather than failing every section
             # ONLY abort for genuine 429 status codes, not generic error messages
