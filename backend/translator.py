@@ -143,11 +143,16 @@ Rate the semantic accuracy: Does the VERIFICATION text represent the EXACT same 
 CRITICAL: Output ONLY a single integer between 0 and 100 representing the accuracy percentage. Do not include any text or explanations.
 """
 
-def _build_refinement_prompt(language_name: str, glossary_prompt: str, failed_translation: str) -> str:
+def _build_refinement_prompt(language_name: str, glossary_prompt: str, failed_translation: str, flagged_terms: list = None) -> str:
+    flagged_text = ""
+    if flagged_terms:
+        terms_str = ", ".join([f'"{t}"' for t in flagged_terms])
+        flagged_text = f"\n\n**CRITICAL GLOSSARY ERROR:** You failed to use the correct translations for the following terminology: {terms_str}. You MUST fix this in your new translation."
+
     return f"""You are a world-class academic proofreader and translator.
 
 ## YOUR TASK
-You previously translated a section of an English research paper into **{language_name}**, but your translation was flagged as **inaccurate** during verification. 
+You previously translated a section of an English research paper into **{language_name}**, but your translation was flagged as **inaccurate** during verification. {flagged_text}
 
 **Your goal is to compare the ENGLISH ORIGINAL with your PREVIOUS FAILED ATTEMPT and produce a 100% faithful, improved {language_name} translation.**
 
@@ -906,7 +911,7 @@ async def translate_paper(
                 # --- Pass 4: Silent Refinement (score < 95%) ---
                 yield {"type": "status", "data": f"🛠️ [{section_index_txt}] Score {round(similarity*100)}% < 95%. Refining silently..."}
                 
-                retranslate_sys = _build_refinement_prompt(language_name, glossary_prompt, translated_chunk)
+                retranslate_sys = _build_refinement_prompt(language_name, glossary_prompt, translated_chunk, flagged_terms=flagged)
                 
                 refined_chunk = ""
                 async for token in _stream_llm_response(
