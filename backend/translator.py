@@ -918,14 +918,14 @@ async def translate_paper(
             err_str = str(e).lower()
             
             # ALWAYS send the real error to the frontend so the user sees what happened
-            yield {"type": "status", "data": f"❌ [{section_index_txt}] Error: {str(e)[:200]}"}
+            yield {"type": "status", "data": f"[ERROR] [{section_index_txt}] {str(e)[:200]}"}
             
             # If the API key is exhausted, abort the whole pipeline rather than failing every section
             # ONLY abort for genuine 429 status codes, not generic error messages
             is_genuine_quota = "429" in err_str or ("ratelimiterror" in err_str.replace(" ", "").replace("_", ""))
             if is_genuine_quota:
                 error_body = (
-                    f"❌ API Quota Exhausted while translating '{section_title}'. "
+                    f"[QUOTA] API Quota Exhausted while translating '{section_title}'. "
                     f"Your '{user_provider.upper()}' key has hit its rate limit. "
                     "Please switch to a different provider in Advanced Settings, use a fresh API key, or wait for your quota to reset."
                 )
@@ -936,7 +936,7 @@ async def translate_paper(
             
             # Dynamic Chunking Fallback: If section is very large, split it and retry
             if len(section['content']) > 1500 and "\n\n" in section['content']:
-                yield {"type": "status", "data": f"⚠️ [{section_index_txt}] Chunk failed. Splitting in half and retrying..."}
+                yield {"type": "status", "data": f"[WARN] [{section_index_txt}] Chunk failed. Splitting in half and retrying..."}
                 paragraphs = section["content"].split("\n\n")
                 mid = len(paragraphs) // 2
                 half1_content = "\n\n".join(paragraphs[:mid])
@@ -979,7 +979,7 @@ async def translate_paper(
             # Otherwise, it's a transient error — skip and continue
             error_msg = f"Translation failed for section: {section_title}. Original text preserved."
             yield {"type": "warning", "data": error_msg}
-            safe_fallback = f"**[⚠️ Translation Failed for this Section]**\n\n{section_content}"
+            safe_fallback = f"**[Translation Failed for this Section]**\n\n{section_content}"
             full_translated_markdown += f"\n\n{safe_fallback}\n\n"
             yield {"type": "translation_chunk", "data": f"\n\n{safe_fallback}\n\n"}
             
