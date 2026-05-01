@@ -559,91 +559,26 @@ async def translate_paper(
         tmp_path = tmp_file.name
         
     # ═══════════════════════════════════════════════════════════════
-    # STEP 0: INITIAL PREPARATION & STATUS
+    # STEP 1: PDF TEXT EXTRACTION (PyMuPDF)
+    #   Direct, reliable extraction using fitz. Fast and quota-free.
+    #   Followed by heuristic Markdown structuring to detect headings.
     # ═══════════════════════════════════════════════════════════════
-    yield {"type": "status", "data": "📄 Initializing PDF processing engine..."}
-    
-    # ═══════════════════════════════════════════════════════════════
-    # STEP 1: SEMANTIC MARKDOWN EXTRACTION (Gemini Vision API)
-    #   Replaces legacy PyMuPDF coordinate mapping. Perfectly extracts
-    #   tables as Markdown and equations as LaTeX.
-    # ═══════════════════════════════════════════════════════════════
-    yield {"type": "status", "data": "📥 Extracting Semantic Markdown with Gemini Vision..."}
+    yield {"type": "status", "data": "📄 Extracting text from PDF..."}
     original_english_text = ""
     try:
-        import asyncio
-        import google.generativeai as genai
-        
-        # Determine which key to use for extraction
-        extract_key = api_key if (api_key and user_provider == "google") else settings.gemini_api_key
-        genai.configure(api_key=extract_key)
-        extract_model_name = user_model if (user_model and user_provider == "google") else settings.gemini_model
-        model = genai.GenerativeModel(extract_model_name)
-        
-        yield {"type": "status", "data": "📤 Uploading PDF to Gemini for structural analysis..."}
-        gemini_file = genai.upload_file(tmp_path, mime_type="application/pdf")
-        
-        yield {"type": "status", "data": "🧠 Gemini is converting PDF to Semantic Markdown (preserving tables/math)..."}
-        
-        prompt = (
-            "You are an expert academic document parser. "
-            "Convert this entire PDF document into perfectly structured Semantic Markdown. "
-            "CRITICAL INSTRUCTIONS: "
-            "1. Preserve ALL tables as standard Markdown tables (| Header |). "
-            "2. Preserve ALL mathematical equations as LaTeX blocks (using $$ for block and $ for inline). "
-            "3. Maintain the exact hierarchical structure using standard Markdown headings (#, ##, ###). "
-            "4. Output ONLY the raw Markdown text. Do not add any conversational preamble. "
-            "5. DO NOT translate the text. Keep it in the original language (English)."
-        )
-        
-        while gemini_file.state.name == 'PROCESSING':
-            yield {"type": "status", "data": "⏳ Waiting for Gemini to process the document..."}
-            await asyncio.sleep(2)
-            gemini_file = genai.get_file(gemini_file.name)
-            
-        if gemini_file.state.name == 'FAILED':
-            raise Exception("Gemini failed to process the uploaded PDF.")
-        
-        response_stream = await asyncio.wait_for(
-            model.generate_content_async([gemini_file, prompt], stream=True),
-            timeout=300.0
-        )
-        
-        import time
-        last_yield_time = time.time()
-        
-        async for chunk in response_stream:
-            if chunk.text:
-                original_english_text += chunk.text
-            
-            # Yield a small heartbeat every 5 seconds so the frontend SSE connection doesn't time out
-            current_time = time.time()
-            if current_time - last_yield_time >= 5.0:
-                yield {"type": "status", "data": "🧠 Reading pages... please wait."}
-                last_yield_time = current_time
-        
-        try:
-            genai.delete_file(gemini_file.name)
-        except Exception as cleanup_err:
-            logger.warning(f"Failed to delete temporary Gemini file: {cleanup_err}")
-            
+        import fitz
+        doc = fitz.open(stream=pdf_content, filetype="pdf")
+        for page in doc:
+            original_english_text += page.get_text() + "\n\n"
+        doc.close()
+        yield {"type": "status", "data": "✅ Text extraction complete."}
+        # Detect section headings and add Markdown markers so the splitter works correctly
+        original_english_text = _structure_raw_text_as_markdown(original_english_text)
+        yield {"type": "status", "data": "🔧 Document structure detected."}
     except Exception as extract_err:
-        logger.error(f"Gemini extraction failed: {extract_err}")
-        yield {"type": "status", "data": "⚠️ Gemini Vision extraction failed. Falling back to standard text extraction..."}
-        try:
-            import fitz
-            doc = fitz.open(stream=pdf_content, filetype="pdf")
-            original_english_text = ""
-            for page in doc:
-                original_english_text += page.get_text() + "\n\n"
-            doc.close()
-            yield {"type": "status", "data": "✅ Standard text extraction complete."}
-            # Apply heuristic Markdown structuring to the raw PyMuPDF text
-            # This detects section headings so split_into_sections() works correctly
-            original_english_text = _structure_raw_text_as_markdown(original_english_text)
-            yield {"type": "status", "data": "🔧 Applied document structure detection."}
-        except Exception as fallback_err:
-            logger.error(f"Fallback PyMuPDF extraction failed: {fallback_err}")
+        logger.error(f"PyMuPDF extraction failed: {extract_err}")
+        yield {"type": "error", "data": f"❌ Failed to extract text from PDF: {extract_err}"}
+        return
 
     if not original_english_text.strip():
         yield {"type": "error", "data": "❌ Could not extract any text from the PDF. It may be corrupted or image-only."}
@@ -817,6 +752,17 @@ async def translate_paper(
                 
             # Normalize mixed numerals (convert Bengali digits to Arabic)
             translated_chunk = translated_chunk.translate(str.maketrans('০১২৩৪৫৬৭৮৯', '0123456789'))
+            
+            # Fix split headings: collapse "## 2\nTitle" back into "## 2 Title"
+            # This is a common artifact from 2-column LaTeX PDFs where section number
+            # and title are on separate lines in the raw text and the model preserves the split.
+            import re as _re
+            translated_chunk = _re.sub(
+                r'^(#{1,3}\s+[\d\.]+)\s*\n+(\S)',
+                r'\1 \2',
+                translated_chunk,
+                flags=_re.MULTILINE
+            )
 
             # Post-processing: Validate numbers from original are preserved
             translated_chunk, num_warnings = _validate_numbers(section['content'], translated_chunk)
